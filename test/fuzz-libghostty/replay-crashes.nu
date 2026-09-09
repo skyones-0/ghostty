@@ -17,7 +17,7 @@
 #   --list      Print crash file paths, one per line (no replay).
 #   --json      Emit structured JSON with fuzzer name, file path,
 #               binary path, and a ready-to-run replay command.
-#               Useful for LLM agents that need to enumerate and
+#               Useful for automated tools and scripts that need to enumerate and
 #               selectively replay specific crashes.
 #   --fuzzer    Restrict to a single fuzzer target (e.g. "stream").
 

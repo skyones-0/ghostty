@@ -33,21 +33,17 @@ Each tab keeps its own visibility and width until it closes. The sidebar starts 
 
 ---
 
-## Real-Time Process & AI Agent Monitor
+## Real-Time Process & Activity Monitor
 
 Ghostty includes a low-overhead, native Darwin process monitoring subsystem (`TerminalProcessMonitor`) and Braille progress indicators:
 
-### 🤖 Intelligent AI Agent State Detection
-- Automatically detects AI coding agents running in the foreground or background:
-  - **Google Antigravity CLI (`agy`)**
-  - **Claude Code (`claude`)**
-  - **Codex CLI (`codex`)**
-  - **Ollama (`ollama`)**
-- Uses Darwin `proc_pidinfo(PROC_PIDTASKINFO)` to compute real-time microsecond CPU deltas (`pti_total_user + pti_total_system`) across the agent and all child processes spawned by it.
-- **Thinking vs Idle**:
-  - When actively computing, researching, or generating code, the badge shows `[🤖 agy ⣀⣄⣤⣦ thinking]` with an animated Braille equalizer.
-  - When paused and waiting for user prompt or input, the badge switches to `[🤖 agy ⣀⣀⣀⣀ idle]` and halts the animation, dropping CPU usage to **0.0%**.
-  - Includes a 2.5-second smoothing hysteresis window to prevent flickering during token streaming chunks.
+### ⚡ Smart Process Activity Detection
+- Automatically tracks intensive command processes running in the foreground or background.
+- Uses Darwin `proc_pidinfo(PROC_PIDTASKINFO)` to compute real-time microsecond CPU deltas (`pti_total_user + pti_total_system`) across the process and all child processes spawned by it.
+- **Active vs Idle**:
+  - When actively computing, compiling, or streaming I/O, the badge displays an animated Braille equalizer `[◈ <name> ⣀⣄⣤⣦ active]`.
+  - When resting or waiting for user input, the badge switches to `[◈ <name> ⣀⣀⣀⣀ idle]` and halts the animation, dropping CPU usage to **0.0%**.
+  - Includes a 2.5-second smoothing hysteresis window to prevent flickering during bursty operations.
 
 ### ⚡ Background Jobs Badge & Popover
 - Background processes (e.g. `sleep 10 &`, long builds, servers) are detected automatically.
@@ -69,7 +65,7 @@ Ghostty includes a low-overhead, native Darwin process monitoring subsystem (`Te
 
 When `macos-topbar = true` is enabled in configuration, Ghostty renders a balanced, streamlined top navigation bar:
 - **Left**: Current working directory badge (click to copy full path to clipboard) and New Tab button.
-- **Center**: Foreground process indicator, AI Agent thinking/idle badge, background jobs counter pill, and split counter.
+- **Center**: Foreground process indicator, active/idle process equalizer, background jobs counter pill, and split counter.
 - **Right**: Split Right (`2x1`), Split Down (`1x2`), and Quick Commands sidebar toggle (`⌘⇧B`).
 
 ---

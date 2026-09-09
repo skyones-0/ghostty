@@ -193,7 +193,7 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
 
                             // --- CENTER SECTION: Live Process & Job Activity ---
                             HStack(spacing: 6) {
-                                // Active Foreground Process with AI & SSH Detection
+                                // Active Foreground Process with SSH & Activity Monitoring
                                 if let fg = topBarProcessMonitor.foregroundJob {
                                     if fg.isSSH {
                                         // SSH Session Badge (with Production Warning Guardrail)
@@ -210,29 +210,29 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                                         .background(fg.isProduction ? Color.red : Color.blue.opacity(0.18))
                                         .cornerRadius(5)
                                         .help(fg.isProduction ? "⚠️ PRODUCTION SERVER: \(fg.commandLine ?? "ssh")" : "Remote SSH: \(fg.commandLine ?? "ssh")")
-                                    } else if fg.isAIAgent {
-                                        // AI Agent Active Badge (agy, claude, codex)
+                                    } else if fg.isMonitoredProcess {
+                                        // Monitored Process Active Badge
                                         HStack(spacing: 5) {
-                                            Image(systemName: fg.isThinking ? "sparkles" : "sparkle")
+                                            Image(systemName: fg.isActive ? "bolt.fill" : "bolt")
                                                 .font(.system(size: 8))
-                                                .foregroundStyle(fg.isThinking ? Color.purple : Color.secondary)
-                                            Text("🤖 \(fg.aiAgentName)")
+                                                .foregroundStyle(fg.isActive ? Color.purple : Color.secondary)
+                                            Text("◈ \(fg.monitoredToolName)")
                                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                                 .foregroundStyle(Color.primary)
                                             BrailleProgressBarView(
                                                 style: .bar,
-                                                color: fg.isThinking ? Color.purple : Color.secondary,
-                                                isAnimating: fg.isThinking
+                                                color: fg.isActive ? Color.purple : Color.secondary,
+                                                isAnimating: fg.isActive
                                             )
-                                            Text(fg.isThinking ? "thinking" : "idle")
-                                                .font(.system(size: 9, weight: fg.isThinking ? .bold : .medium))
-                                                .foregroundStyle(fg.isThinking ? Color.purple.opacity(0.85) : Color.secondary)
+                                            Text(fg.isActive ? "active" : "idle")
+                                                .font(.system(size: 9, weight: fg.isActive ? .bold : .medium))
+                                                .foregroundStyle(fg.isActive ? Color.purple.opacity(0.85) : Color.secondary)
                                         }
                                         .padding(.horizontal, 6)
                                         .padding(.vertical, 3)
-                                        .background(fg.isThinking ? Color.purple.opacity(0.18) : Color.secondary.opacity(0.12))
+                                        .background(fg.isActive ? Color.purple.opacity(0.18) : Color.secondary.opacity(0.12))
                                         .cornerRadius(5)
-                                        .help("AI Agent \(fg.aiAgentName): \(fg.isThinking ? "thinking / executing" : "idle (waiting for user input)") - PID \(fg.pid)")
+                                        .help("Process \(fg.monitoredToolName): \(fg.isActive ? "active / computing" : "idle") - PID \(fg.pid)")
                                     } else {
                                         // Standard foreground process
                                         HStack(spacing: 5) {
@@ -257,29 +257,29 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                                     }
                                 }
 
-                                // Background AI Agent Badge (when agent is working in background)
-                                if let bgAgent = topBarProcessMonitor.backgroundAIAgent, topBarProcessMonitor.foregroundJob?.isAIAgent != true {
+                                // Background Monitored Process Badge
+                                if let bgJob = topBarProcessMonitor.backgroundMonitoredJob, topBarProcessMonitor.foregroundJob?.isMonitoredProcess != true {
                                     HStack(spacing: 5) {
-                                        Image(systemName: bgAgent.isThinking ? "sparkles" : "sparkle")
+                                        Image(systemName: bgJob.isActive ? "bolt.fill" : "bolt")
                                             .font(.system(size: 8))
-                                            .foregroundStyle(bgAgent.isThinking ? Color.purple : Color.secondary)
-                                        Text("🤖 \(bgAgent.aiAgentName)")
+                                            .foregroundStyle(bgJob.isActive ? Color.purple : Color.secondary)
+                                        Text("◈ \(bgJob.monitoredToolName)")
                                             .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                             .foregroundStyle(Color.primary)
                                         BrailleProgressBarView(
                                             style: .bar,
-                                            color: bgAgent.isThinking ? Color.purple : Color.secondary,
-                                            isAnimating: bgAgent.isThinking
+                                            color: bgJob.isActive ? Color.purple : Color.secondary,
+                                            isAnimating: bgJob.isActive
                                         )
-                                        Text(bgAgent.isThinking ? "thinking (bg)" : "idle (bg)")
-                                            .font(.system(size: 9, weight: bgAgent.isThinking ? .bold : .medium))
-                                            .foregroundStyle(bgAgent.isThinking ? Color.purple.opacity(0.85) : Color.secondary)
+                                        Text(bgJob.isActive ? "active (bg)" : "idle (bg)")
+                                            .font(.system(size: 9, weight: bgJob.isActive ? .bold : .medium))
+                                            .foregroundStyle(bgJob.isActive ? Color.purple.opacity(0.85) : Color.secondary)
                                     }
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 3)
-                                    .background(bgAgent.isThinking ? Color.purple.opacity(0.18) : Color.secondary.opacity(0.12))
+                                    .background(bgJob.isActive ? Color.purple.opacity(0.18) : Color.secondary.opacity(0.12))
                                     .cornerRadius(5)
-                                    .help("AI Agent in background: \(bgAgent.aiAgentName) (\(bgAgent.isThinking ? "thinking" : "idle")) - PID \(bgAgent.pid)")
+                                    .help("Background process: \(bgJob.monitoredToolName) (\(bgJob.isActive ? "active" : "idle")) - PID \(bgJob.pid)")
                                 }
 
                                 // Background Jobs Indicator (Always visible!)
@@ -539,13 +539,14 @@ private struct BackgroundJobsTopBarIndicator: View {
 
                     ForEach(monitor.backgroundJobs) { job in
                         HStack(spacing: 8) {
-                            if job.isAIAgent {
-                                Text("🤖")
-                                    .font(.system(size: 11))
+                            if job.isMonitoredProcess {
+                                Image(systemName: job.isActive ? "bolt.fill" : "bolt")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(Color.purple)
                                 BrailleProgressBarView(
                                     style: .bar,
-                                    color: job.isThinking ? Color.purple : Color.secondary,
-                                    isAnimating: job.isThinking
+                                    color: job.isActive ? Color.purple : Color.secondary,
+                                    isAnimating: job.isActive
                                 )
                             } else if job.isSSH {
                                 Image(systemName: "network")
@@ -555,9 +556,9 @@ private struct BackgroundJobsTopBarIndicator: View {
                             } else {
                                 BrailleProgressBarView(style: .spinner, color: Color.orange)
                             }
-                            Text(job.isAIAgent ? "\(job.aiAgentName) (\(job.agentStatusText))" : job.name)
+                            Text(job.isMonitoredProcess ? "\(job.monitoredToolName) (\(job.activityStatusText))" : job.name)
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            if !job.isAIAgent && job.state == .waiting {
+                            if !job.isMonitoredProcess && job.state == .waiting {
                                 Text("(waiting)")
                                     .font(.system(size: 9))
                                     .foregroundStyle(.secondary)

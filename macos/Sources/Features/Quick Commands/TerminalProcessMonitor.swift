@@ -16,14 +16,14 @@ struct TerminalJob: Identifiable, Equatable {
     let pgid: Int32
     let isForeground: Bool
     var state: TerminalJobState = .running
-    var isThinking: Bool = true
+    var isActive: Bool = true
 
     var isWaiting: Bool {
         state == .waiting
     }
 
-    var agentStatusText: String {
-        isThinking ? "thinking" : "idle"
+    var activityStatusText: String {
+        isActive ? "active" : "idle"
     }
 
     var isSSH: Bool {
@@ -55,13 +55,13 @@ struct TerminalJob: Identifiable, Equatable {
         return text.contains("prod") || text.contains("prd") || text.contains("production")
     }
 
-    var isAIAgent: Bool {
+    var isMonitoredProcess: Bool {
         let lower = name.lowercased()
         let cmd = (commandLine ?? "").lowercased()
         return lower == "agy" || lower == "claude" || lower == "codex" || lower == "ollama" || lower.contains("copilot") || cmd.contains("antigravity")
     }
 
-    var aiAgentName: String {
+    var monitoredToolName: String {
         let lower = name.lowercased()
         if lower.contains("claude") { return "Claude" }
         if lower.contains("agy") { return "AGY" }
@@ -85,12 +85,12 @@ final class TerminalProcessMonitor: ObservableObject {
         runningJobs.filter { !$0.isForeground }
     }
 
-    var activeAIAgent: TerminalJob? {
-        runningJobs.first(where: { $0.isAIAgent })
+    var activeMonitoredJob: TerminalJob? {
+        runningJobs.first(where: { $0.isMonitoredProcess })
     }
 
-    var backgroundAIAgent: TerminalJob? {
-        backgroundJobs.first(where: { $0.isAIAgent })
+    var backgroundMonitoredJob: TerminalJob? {
+        backgroundJobs.first(where: { $0.isMonitoredProcess })
     }
 
     private func getCwd(pid: pid_t) -> String? {
@@ -242,22 +242,22 @@ final class TerminalProcessMonitor: ObservableObject {
             let deltaCpu = (cpuTime >= prevCpu) ? (cpuTime - prevCpu) : 0
             previousCpuTimes[pid] = cpuTime
 
-            // Check if process has child processes (e.g. tools executed by the agent)
+            // Check if process has child processes (e.g. tools executed by the process)
             let hasChildProcesses = procs.contains { $0.kp_eproc.e_ppid == pid }
 
-            // Agent or process is actively computing if delta CPU > 2ms or has child processes
+            // Process is actively computing if delta CPU > 2ms or has child processes
             let isActivelyComputing = (deltaCpu > 2_000) || hasChildProcesses
 
             if isActivelyComputing {
                 lastActiveTimes[pid] = Date()
             }
 
-            // A process/agent is thinking if it computed recently (within 2.5s grace period)
-            let thinking: Bool
+            // A monitored process is active if it computed recently (within 2.5s grace period)
+            let active: Bool
             if let lastActive = lastActiveTimes[pid] {
-                thinking = Date().timeIntervalSince(lastActive) < 2.5
+                active = Date().timeIntervalSince(lastActive) < 2.5
             } else {
-                thinking = isActivelyComputing
+                active = isActivelyComputing
             }
 
             let job = TerminalJob(
@@ -267,7 +267,7 @@ final class TerminalProcessMonitor: ObservableObject {
                 pgid: pgid,
                 isForeground: isFg,
                 state: jobState,
-                isThinking: thinking
+                isActive: active
             )
             currentJobs.append(job)
             currentPids.insert(pid)

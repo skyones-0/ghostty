@@ -3562,7 +3562,7 @@ keybind: Keybinds = .{},
 ///  * `official` - Use the official Ghostty icon.
 ///  * `blueprint`, `chalkboard`, `microchip`, `glass`, `holographic`,
 ///    `paper`, `retro`, `xray` - Official variants of the Ghostty icon
-///    hand-created by artists (no AI).
+///    hand-created by artists.
 ///  * `custom` - Use a completely custom icon. The location must be specified
 ///    using the additional `macos-custom-icon` configuration
 ///  * `custom-style` - Use the official Ghostty icon but with custom

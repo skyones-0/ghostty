@@ -28,27 +28,27 @@ struct BrailleAndProcessMonitorTests {
         }
     }
 
-    @Test func terminalJobAIAgentDetection() {
+    @Test func terminalJobMonitoredProcessDetection() {
         let agy = TerminalJob(pid: 100, name: "agy", commandLine: "agy --prompt 'hello'", pgid: 100, isForeground: true, state: .running)
-        #expect(agy.isAIAgent)
-        #expect(agy.aiAgentName == "AGY")
+        #expect(agy.isMonitoredProcess)
+        #expect(agy.monitoredToolName == "AGY")
         #expect(!agy.isWaiting)
 
         let claude = TerminalJob(pid: 101, name: "claude", commandLine: "claude code", pgid: 101, isForeground: true, state: .waiting)
-        #expect(claude.isAIAgent)
-        #expect(claude.aiAgentName == "Claude")
+        #expect(claude.isMonitoredProcess)
+        #expect(claude.monitoredToolName == "Claude")
         #expect(claude.isWaiting)
 
         let codex = TerminalJob(pid: 102, name: "codex", commandLine: "codex run", pgid: 102, isForeground: false, state: .running)
-        #expect(codex.isAIAgent)
-        #expect(codex.aiAgentName == "Codex")
+        #expect(codex.isMonitoredProcess)
+        #expect(codex.monitoredToolName == "Codex")
 
         let ollama = TerminalJob(pid: 103, name: "ollama", commandLine: "ollama run llama3", pgid: 103, isForeground: false, state: .running)
-        #expect(ollama.isAIAgent)
-        #expect(ollama.aiAgentName == "Ollama")
+        #expect(ollama.isMonitoredProcess)
+        #expect(ollama.monitoredToolName == "Ollama")
 
         let normal = TerminalJob(pid: 104, name: "cargo", commandLine: "cargo build", pgid: 104, isForeground: true, state: .running)
-        #expect(!normal.isAIAgent)
+        #expect(!normal.isMonitoredProcess)
     }
 
     @Test func terminalJobSSHDetection() {
@@ -89,29 +89,29 @@ struct BrailleAndProcessMonitorTests {
         #expect(idleWave.idleFrame == "⡀⡀⡀⡀")
     }
 
-    @Test func terminalJobThinkingVsIdle() {
-        let thinkingAgent = TerminalJob(
+    @Test func terminalJobActiveVsIdle() {
+        let activeJob = TerminalJob(
             pid: 400,
             name: "agy",
             commandLine: "agy --prompt 'refactor'",
             pgid: 400,
             isForeground: true,
             state: .running,
-            isThinking: true
+            isActive: true
         )
-        #expect(thinkingAgent.isThinking)
-        #expect(thinkingAgent.agentStatusText == "thinking")
+        #expect(activeJob.isActive)
+        #expect(activeJob.activityStatusText == "active")
 
-        let idleAgent = TerminalJob(
+        let idleJob = TerminalJob(
             pid: 401,
             name: "agy",
             commandLine: "agy",
             pgid: 401,
             isForeground: true,
             state: .waiting,
-            isThinking: false
+            isActive: false
         )
-        #expect(!idleAgent.isThinking)
-        #expect(idleAgent.agentStatusText == "idle")
+        #expect(!idleJob.isActive)
+        #expect(idleJob.activityStatusText == "idle")
     }
 }

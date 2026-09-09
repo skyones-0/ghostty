@@ -87,7 +87,7 @@ cmwetherell
 crayxt
 craziestowl
 curtismoncoq
--cznorth Automated advertising + likely AI communication
+-cznorth Automated advertising + low quality communication
 d-dudas
 -daedaevibin
 daiimus
@@ -150,7 +150,7 @@ hakonhagland
 halosatrio
 heaths
 heddxh heddxh
--highimpact-dev Disrespectful AI user
+-highimpact-dev Disrespectful contributor
 hlcfan
 hqnna
 hulet
@@ -162,7 +162,7 @@ j0hnm4r5
 jacobsandlund
 jake-stewart
 jakeriksen
--jamesarch Bad AI etiquette
+-jamesarch Bad etiquette
 jamylak
 jarred-sumner
 jcollie
@@ -230,7 +230,7 @@ mjbommar
 mohshami
 molechowski
 moonmao42
--morgengeluk Appears to be using AI inappropriately even after it was requested they abide by the AI policy (there is clear evidence of the person-in-the-loop not attempting to clean up AI generated text, and their AI disclosure itself reads like AI-generated text and shows no signs of remorse or intent to improve).
+-morgengeluk Low quality automated contributions without review.
 mpatankar6
 mrconnorkenway
 mrmage

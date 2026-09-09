@@ -51,9 +51,9 @@ This fork ([`skyones-0/ghostty`](https://github.com/skyones-0/ghostty)) introduc
   - Full native keyboard navigation (`↑`/`↓` circular navigation, `Return` to execute, `⌥ Return` to insert, `Escape` to focus terminal).
   - Auto-scrolling centered item tracking (`ScrollViewReader`).
   - Synced atomic dotfiles storage (`~/.config/ghostty/quick-commands.json`) with live Darwin file watching.
-- **🤖 Intelligent AI Agent Process Monitor**:
-  - Real-time Darwin CPU delta tracking via `proc_pidinfo(PROC_PIDTASKINFO)` for `agy`, `claude`, `codex`, and `ollama`.
-  - Smart **Thinking** vs **Idle / Waiting for prompt** detection with 2.5s smoothing window.
+- **⚙️ Real-Time Process & Resource Monitor**:
+  - Real-time Darwin CPU delta tracking via `proc_pidinfo(PROC_PIDTASKINFO)` for monitored developer tools and command sessions.
+  - Smart **Active / Computing** vs **Idle / Resting** detection with 2.5s smoothing window.
   - Animated Unicode Braille Equalizer (`⣀⣄⣤⣦`) and Spinners (`⠋⠙⠹...`) that pause on idle (0.0% CPU overhead).
 - **📦 Background Jobs Pill & Popover**:
   - Live pill indicator (`[⠋ N bg]`) in the top bar and sidebar header.
