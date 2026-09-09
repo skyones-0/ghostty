@@ -100,6 +100,12 @@
                                     <action selector="openConfig:" target="bbz-4X-AYv" id="X65-fg-iWU"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Configuration Studio…" id="CFG-STD-001">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="openConfigStudio:" target="bbz-4X-AYv" id="CFG-STD-ACT"/>
+                                </connections>
+                            </menuItem>
                             <menuItem isSeparatorItem="YES" id="GOd-qX-exa"/>
                             <menuItem title="Reload Configuration" id="KKH-XX-5py">
                                 <modifierMask key="keyEquivalentModifierMask"/>

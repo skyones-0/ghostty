@@ -955,6 +955,13 @@ class AppDelegate: NSObject,
         ghostty.openConfig()
     }
 
+    @IBAction func openConfigStudio(_ sender: Any?) {
+        var config = Ghostty.SurfaceConfiguration()
+        let binPath = Bundle.main.executablePath ?? "ghostty"
+        config.command = "\(binPath) +config"
+        _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
+    }
+
     @IBAction func reloadConfig(_ sender: Any?) {
         ghostty.reloadConfig()
     }

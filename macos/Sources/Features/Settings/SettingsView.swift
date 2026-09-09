@@ -5,22 +5,41 @@ struct SettingsView: View {
     @EnvironmentObject private var appDelegate: AppDelegate
 
     var body: some View {
-        HStack {
+        HStack(spacing: 20) {
             Image("AppIconImage")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 128, height: 128)
+                .frame(width: 96, height: 96)
 
-            VStack(alignment: .leading) {
-                Text("Coming Soon. 🚧").font(.title)
-                Text("You can't configure settings in the GUI yet. To modify settings, " +
-                     "edit the file at $HOME/.config/ghostty/config.ghostty and restart Ghostty.")
-                .multilineTextAlignment(.leading)
-                .lineLimit(nil)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Ghostty Configuration Studio")
+                    .font(.headline)
+
+                Text("Browse themes, customize fonts, adjust window appearance, cursor, and terminal behavior interactively.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(nil)
+
+                HStack(spacing: 12) {
+                    Button(action: {
+                        appDelegate.openConfigStudio(nil)
+                    }) {
+                        Label("Launch Configuration Studio", systemImage: "slider.horizontal.3")
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button(action: {
+                        appDelegate.openConfig(nil)
+                    }) {
+                        Label("Edit Config File", systemImage: "doc.text")
+                    }
+                }
+                .padding(.top, 4)
             }
         }
-        .padding()
-        .frame(minWidth: 500, maxWidth: 500, minHeight: 156, maxHeight: 156)
+        .padding(20)
+        .frame(minWidth: 540, maxWidth: 560, minHeight: 160, maxHeight: 180)
     }
 }
 
