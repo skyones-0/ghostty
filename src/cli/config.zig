@@ -597,14 +597,26 @@ const Studio = struct {
         };
     }
 
-    fn activeSettings(self: *Studio) std.ArrayList(*SettingItem) {
-        var list: std.ArrayList(*SettingItem) = .empty;
+    fn getActiveSetting(self: *Studio, index: usize) ?*SettingItem {
+        var current: usize = 0;
         for (self.settings.items) |*item| {
             if (item.category == self.category) {
-                list.append(self.allocator, item) catch continue;
+                if (current == index) return item;
+                current += 1;
             }
         }
-        return list;
+        return null;
+    }
+
+    fn getActiveSettingConst(self: *const Studio, index: usize) ?*const SettingItem {
+        var current: usize = 0;
+        for (self.settings.items) |*item| {
+            if (item.category == self.category) {
+                if (current == index) return item;
+                current += 1;
+            }
+        }
+        return null;
     }
 
     fn activeItemCount(self: *Studio) usize {
@@ -630,15 +642,11 @@ const Studio = struct {
         try self.vx.setMouseMode(writer, true);
 
         while (!self.should_quit) {
-            var arena = std.heap.ArenaAllocator.init(self.allocator);
-            defer arena.deinit();
-            const alloc = arena.allocator();
-
             try loop.pollEvent();
             while (try loop.tryEvent()) |event| {
                 try self.update(event);
             }
-            try self.draw(alloc);
+            try self.draw();
 
             try self.vx.render(writer);
             try writer.flush();
@@ -728,10 +736,7 @@ const Studio = struct {
                         self.save_status = "Theme selected! Press [s] to write to config.";
                     }
                 } else {
-                    var items = self.activeSettings();
-                    defer items.deinit(self.allocator);
-                    if (self.cursor_idx < items.items.len) {
-                        const item = items.items[self.cursor_idx];
+                    if (self.getActiveSetting(self.cursor_idx)) |item| {
                         if (key.matchesAny(&.{ vaxis.Key.right, 'l', '+' }, .{})) {
                             item.next();
                             self.save_status = "Setting adjusted. Press [s] to save.";
@@ -848,7 +853,7 @@ const Studio = struct {
         self.save_status = "✓ Saved to ~/.config/ghostty/config! Ghostty reloaded.";
     }
 
-    pub fn draw(self: *Studio, alloc: std.mem.Allocator) !void {
+    pub fn draw(self: *Studio) !void {
         const win = self.vx.window();
         win.clear();
 
@@ -909,7 +914,7 @@ const Studio = struct {
         if (self.category == .themes) {
             try self.drawThemesList(left_win);
         } else {
-            try self.drawSettingsList(left_win, alloc);
+            try self.drawSettingsList(left_win);
         }
 
         // Right Pane: Live Terminal Preview
@@ -920,7 +925,7 @@ const Studio = struct {
                 .width = win.width - left_width - 1,
                 .height = body_height,
             });
-            try self.drawPreviewPane(right_win, alloc);
+            try self.drawPreviewPane(right_win);
         }
 
         // Status & Footer Bar
@@ -991,12 +996,12 @@ const Studio = struct {
         }
     }
 
-    fn drawSettingsList(self: *Studio, win: vaxis.Window, alloc: Allocator) !void {
-        var items = self.activeSettings();
-        defer items.deinit(alloc);
-
-        for (items.items, 0..) |item, row| {
+    fn drawSettingsList(self: *Studio, win: vaxis.Window) !void {
+        var row: u16 = 0;
+        for (self.settings.items) |*item| {
+            if (item.category != self.category) continue;
             if (row >= win.height) break;
+
             const is_sel = (row == self.cursor_idx);
 
             const row_style: vaxis.Style = if (is_sel) .{
@@ -1008,8 +1013,8 @@ const Studio = struct {
             };
 
             const prefix: []const u8 = if (is_sel) "❯ " else "  ";
-            _ = win.printSegment(.{ .text = prefix, .style = row_style }, .{ .row_offset = @intCast(row), .col_offset = 1 });
-            _ = win.printSegment(.{ .text = item.label, .style = row_style }, .{ .row_offset = @intCast(row), .col_offset = 3 });
+            _ = win.printSegment(.{ .text = prefix, .style = row_style }, .{ .row_offset = row, .col_offset = 1 });
+            _ = win.printSegment(.{ .text = item.label, .style = row_style }, .{ .row_offset = row, .col_offset = 3 });
 
             // Value preview
             var val_buf: [128]u8 = undefined;
@@ -1020,12 +1025,16 @@ const Studio = struct {
                 .bold = true,
             };
 
-            const val_col: u16 = if (win.width > 18) win.width - @as(u16, @intCast(@min(val_str.len + 2, win.width))) else 20;
-            _ = win.printSegment(.{ .text = val_str, .style = val_style }, .{ .row_offset = @intCast(row), .col_offset = val_col });
+            const val_col: u16 = if (win.width > val_str.len + 4)
+                win.width -| @as(u16, @intCast(val_str.len + 2))
+            else
+                win.width -| @as(u16, @intCast(val_str.len));
+            _ = win.printSegment(.{ .text = val_str, .style = val_style }, .{ .row_offset = row, .col_offset = val_col });
+            row += 1;
         }
     }
 
-    fn drawPreviewPane(self: *Studio, win: vaxis.Window, alloc: Allocator) !void {
+    fn drawPreviewPane(self: *Studio, win: vaxis.Window) !void {
         const border_style: vaxis.Style = .{ .fg = .{ .rgb = [_]u8{ 0x50, 0x49, 0x45 } } };
 
         // Draw simulated macOS Terminal window
@@ -1120,10 +1129,7 @@ const Studio = struct {
                 .style = .{ .fg = .{ .rgb = [_]u8{ 0x83, 0xa5, 0x98 } } },
             }, .{ .row_offset = 13, .col_offset = 2 });
         } else {
-            var items = self.activeSettings();
-            defer items.deinit(alloc);
-            if (self.cursor_idx < items.items.len) {
-                const item = items.items[self.cursor_idx];
+            if (self.getActiveSettingConst(self.cursor_idx)) |item| {
                 _ = win.printSegment(.{
                     .text = item.label,
                     .style = .{ .fg = .{ .rgb = [_]u8{ 0xfa, 0xbd, 0x2f } }, .bold = true },
