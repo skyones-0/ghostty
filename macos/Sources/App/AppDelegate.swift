@@ -24,6 +24,7 @@ class AppDelegate: NSObject,
     @IBOutlet private var menuOpenConfig: NSMenuItem?
     @IBOutlet private var menuReloadConfig: NSMenuItem?
     @IBOutlet private var menuSecureInput: NSMenuItem?
+    @IBOutlet private var menuKeepAwake: NSMenuItem?
     @IBOutlet private var menuQuit: NSMenuItem?
 
     @IBOutlet private var menuNewWindow: NSMenuItem?
@@ -329,6 +330,7 @@ class AppDelegate: NSObject,
 
         // Setup our menu
         setupMenuImages()
+        KeepAwakeManager.shared.setup(menuItem: self.menuKeepAwake)
 
         // Setup signal handlers
         setupSignals()
@@ -421,6 +423,8 @@ class AppDelegate: NSObject,
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        KeepAwakeManager.shared.deactivate()
+
         // We have no notifications we want to persist after death,
         // so remove them all now. In the future we may want to be
         // more selective and only remove surface-targeted notifications.
@@ -1130,6 +1134,7 @@ extension AppDelegate {
         self.menuOpenConfig?.setImageIfDesired(systemSymbolName: "gear")
         self.menuReloadConfig?.setImageIfDesired(systemSymbolName: "arrow.trianglehead.2.clockwise.rotate.90")
         self.menuSecureInput?.setImageIfDesired(systemSymbolName: "lock.display")
+        self.menuKeepAwake?.setImageIfDesired(systemSymbolName: "cup.and.saucer")
         self.menuNewWindow?.setImageIfDesired(systemSymbolName: "macwindow.badge.plus")
         self.menuNewTab?.setImageIfDesired(systemSymbolName: "macwindow")
         self.menuSplitRight?.setImageIfDesired(systemSymbolName: "rectangle.righthalf.inset.filled")
