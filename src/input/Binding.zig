@@ -438,6 +438,9 @@ pub const Action = union(enum) {
     /// Select all text on the screen.
     select_all,
 
+    /// Copy the output of the most recent command to the clipboard.
+    copy_last_command_output,
+
     /// Scroll to the top of the screen.
     scroll_to_top,
 
@@ -1412,6 +1415,7 @@ pub const Action = union(enum) {
             .set_window_title,
             .clear_screen,
             .select_all,
+            .copy_last_command_output,
             .scroll_to_top,
             .scroll_to_bottom,
             .scroll_to_selection,

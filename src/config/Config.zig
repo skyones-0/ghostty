@@ -3483,10 +3483,10 @@ keybind: Keybinds = .{},
 @"macos-window-shadow": bool = true,
 
 /// Whether to show the top bar in the macOS terminal window.
-@"macos-topbar": bool = true,
+@"macos-topbar": bool = false,
 
 /// Whether to show the Command Palette button in the macOS top bar.
-@"macos-topbar-palette": bool = true,
+@"macos-topbar-palette": bool = false,
 
 /// If true, the macOS icon in the dock and app switcher will be hidden. This is
 /// mainly intended for those primarily using the quick-terminal mode.
@@ -6670,6 +6670,15 @@ pub const Keybinds = struct {
                 .paste_from_clipboard,
                 .{ .performable = true },
             );
+
+            if (builtin.target.os.tag.isDarwin()) {
+                try self.set.putFlags(
+                    alloc,
+                    .{ .key = .{ .unicode = 'c' }, .mods = .{ .super = true, .shift = true } },
+                    .copy_last_command_output,
+                    .{ .performable = true },
+                );
+            }
         }
 
         // Increase font size mapping for keyboards with dedicated plus keys (like german)

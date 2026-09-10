@@ -25,50 +25,6 @@ struct TerminalJob: Identifiable, Equatable {
     var activityStatusText: String {
         isActive ? "active" : "idle"
     }
-
-    var isSSH: Bool {
-        name.lowercased() == "ssh"
-    }
-
-    var sshTarget: String? {
-        guard isSSH, let cmd = commandLine else { return nil }
-        let tokens = cmd.split(separator: " ").map(String.init)
-        var skipNext = false
-        for t in tokens.dropFirst() {
-            if skipNext {
-                skipNext = false
-                continue
-            }
-            if t.hasPrefix("-") {
-                if ["-i", "-p", "-l", "-F", "-o", "-c", "-b", "-L", "-R", "-D"].contains(t) {
-                    skipNext = true
-                }
-                continue
-            }
-            return t
-        }
-        return nil
-    }
-
-    var isProduction: Bool {
-        let text = (sshTarget ?? commandLine ?? "").lowercased()
-        return text.contains("prod") || text.contains("prd") || text.contains("production")
-    }
-
-    var isMonitoredProcess: Bool {
-        let lower = name.lowercased()
-        let cmd = (commandLine ?? "").lowercased()
-        return lower == "agy" || lower == "claude" || lower == "codex" || lower == "ollama" || lower.contains("copilot") || cmd.contains("antigravity")
-    }
-
-    var monitoredToolName: String {
-        let lower = name.lowercased()
-        if lower.contains("claude") { return "Claude" }
-        if lower.contains("agy") { return "AGY" }
-        if lower.contains("codex") { return "Codex" }
-        if lower.contains("ollama") { return "Ollama" }
-        return name.capitalized
-    }
 }
 
 @MainActor
@@ -76,6 +32,7 @@ final class TerminalProcessMonitor: ObservableObject {
     @Published private(set) var runningJobs: [TerminalJob] = []
     @Published private(set) var recentExits: [String] = []
     @Published private(set) var currentWorkingDir: String?
+    @Published private(set) var activePortAlert: LocalPortInfo?
 
     var foregroundJob: TerminalJob? {
         runningJobs.first(where: { $0.isForeground })
@@ -83,14 +40,6 @@ final class TerminalProcessMonitor: ObservableObject {
 
     var backgroundJobs: [TerminalJob] {
         runningJobs.filter { !$0.isForeground }
-    }
-
-    var activeMonitoredJob: TerminalJob? {
-        runningJobs.first(where: { $0.isMonitoredProcess })
-    }
-
-    var backgroundMonitoredJob: TerminalJob? {
-        backgroundJobs.first(where: { $0.isMonitoredProcess })
     }
 
     private func getCwd(pid: pid_t) -> String? {
@@ -144,6 +93,10 @@ final class TerminalProcessMonitor: ObservableObject {
         return ti.pti_total_user + ti.pti_total_system
     }
 
+    let portDetector = LocalPortDetector()
+    var isFocused: Bool = true
+    private var previousForegroundPid: Int32?
+
     private var timer: Timer?
     private weak var surfaceView: Ghostty.SurfaceView?
     private var previousPids: Set<Int32> = []
@@ -189,6 +142,11 @@ final class TerminalProcessMonitor: ObservableObject {
             self?.refresh()
         }
         refresh()
+    }
+
+    func dismissPortAlert() {
+        portDetector.dismissAlert()
+        activePortAlert = nil
     }
 
     func refresh() {
@@ -293,6 +251,28 @@ final class TerminalProcessMonitor: ObservableObject {
 
         previousPids = currentPids
         runningJobs = currentJobs
+
+        // Inspect local listening ports on processes attached to this session
+        let allSessionPids = procs.map { $0.kp_proc.p_pid }.filter { $0 > 0 }
+        portDetector.inspect(pids: allSessionPids, names: knownNames)
+        self.activePortAlert = portDetector.activeAlert
+
+        // Track foreground command execution for long-running notifications
+        if let fg = currentJobs.first(where: { $0.isForeground }) {
+            if fg.pid != previousForegroundPid {
+                if let surfaceId = surfaceView?.id {
+                    LongCommandNotifier.shared.commandDidStart(name: fg.name, commandLine: fg.commandLine, surfaceUUID: surfaceId)
+                }
+                previousForegroundPid = fg.pid
+            }
+        } else {
+            if previousForegroundPid != nil {
+                if let surfaceId = surfaceView?.id {
+                    LongCommandNotifier.shared.commandDidFinish(surfaceUUID: surfaceId, isFocused: isFocused)
+                }
+                previousForegroundPid = nil
+            }
+        }
 
         // Query Current Working Directory
         var targetPidForCwd: pid_t = 0

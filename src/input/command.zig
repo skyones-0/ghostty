@@ -180,6 +180,12 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = i18n.N_("Copy the terminal title to the clipboard. If the terminal title is not set this has no effect."),
         }},
 
+        .copy_last_command_output => comptime &.{.{
+            .action = .copy_last_command_output,
+            .title = i18n.N_("Copy Last Command Output"),
+            .description = i18n.N_("Copy the output of the most recent command to the clipboard."),
+        }},
+
         .paste_from_clipboard => comptime &.{.{
             .action = .paste_from_clipboard,
             .title = i18n.N_("Paste from Clipboard"),

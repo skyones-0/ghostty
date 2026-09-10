@@ -5037,6 +5037,36 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             return false;
         },
 
+        .copy_last_command_output => {
+            self.renderer_state.mutex.lockUncancelable(global.io());
+            defer self.renderer_state.mutex.unlock(global.io());
+
+            const screen = self.io.terminal.screens.active;
+            const sel: ?terminal.Selection = sel: {
+                const cursor_pin = screen.cursor.page_pin.*;
+                var it = cursor_pin.cellIterator(.left_up, null);
+                while (it.next()) |p| {
+                    if (p.rowAndCell().cell.semantic_content == .output) {
+                        if (screen.selectOutput(p)) |s| {
+                            break :sel s;
+                        }
+                    }
+                }
+                break :sel null;
+            };
+
+            if (sel) |s| {
+                try self.copySelectionToClipboards(
+                    s,
+                    &.{.standard},
+                    .mixed,
+                );
+                return true;
+            }
+
+            return false;
+        },
+
         .copy_url_to_clipboard => {
             // If the mouse isn't over a link, nothing we can do.
             if (!self.mouse.over_link) return false;

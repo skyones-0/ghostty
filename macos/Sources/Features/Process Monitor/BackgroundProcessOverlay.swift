@@ -6,36 +6,46 @@ struct BackgroundProcessOverlay: View {
 
     // Animations
     @State private var gradientAngle: Angle = .degrees(0)
-    @State private var gradientOpacity: CGFloat = 0.5
+    @State private var isHovered = false
 
     // Popover explainer text
     @State private var isPopover = false
+
+    private var isActive: Bool {
+        isHovered || isPopover
+    }
 
     var body: some View {
         Image(systemName: "gearshape.2.fill")
             .resizable()
             .scaledToFit()
             .frame(width: 19, height: 19)
-            .foregroundColor(.black)
+            .foregroundColor(isActive ? .black : Color.primary.opacity(0.6))
             .frame(width: 35, height: 35)
             .background(
-                Rectangle()
-                    .fill(
-                        AngularGradient(
-                            gradient: Gradient(
-                                colors: [.purple, .blue, .cyan, .blue, .purple]
-                            ),
-                            center: .center,
-                            angle: gradientAngle
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.ultraThinMaterial)
+                        .opacity(isActive ? 0.3 : 0.8)
+
+                    Rectangle()
+                        .fill(
+                            AngularGradient(
+                                gradient: Gradient(
+                                    colors: [.purple, .blue, .cyan, .blue, .purple]
+                                ),
+                                center: .center,
+                                angle: gradientAngle
+                            )
                         )
-                    )
-                    .blur(radius: 4, opaque: true)
-                    .opacity(gradientOpacity)
+                        .blur(radius: 4, opaque: true)
+                        .opacity(isActive ? 0.85 : 0)
+                }
             )
             .mask(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.gray.opacity(0.4), lineWidth: 1)
+                    .stroke(isActive ? Color.white.opacity(0.3) : Color.primary.opacity(0.12), lineWidth: 1)
             )
             .overlay(alignment: .topTrailing) {
                 if jobs.count > 1 {
@@ -50,10 +60,24 @@ struct BackgroundProcessOverlay: View {
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: 12))
+            .scaleEffect(isHovered ? 1.06 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isHovered)
+            .animation(.easeInOut(duration: 0.2), value: isActive)
+            .onHover { hovering in
+                isHovered = hovering
+                if hovering {
+                    withAnimation(Animation.linear(duration: 2.5).repeatForever(autoreverses: false)) {
+                        gradientAngle = .degrees(360)
+                    }
+                } else if !isPopover {
+                    gradientAngle = .degrees(0)
+                }
+            }
             .onTapGesture {
                 isPopover = true
             }
             .backport.pointerStyle(.link)
+            .help("Background Processes (\(jobs.count))")
             .popover(isPresented: $isPopover, arrowEdge: .leading) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 6) {
@@ -126,12 +150,19 @@ struct BackgroundProcessOverlay: View {
                 .frame(minWidth: 280, maxWidth: 360)
             }
             .onAppear {
-                withAnimation(Animation.linear(duration: 2).repeatForever(autoreverses: false)) {
-                    gradientAngle = .degrees(360)
+                if isActive {
+                    withAnimation(Animation.linear(duration: 2.5).repeatForever(autoreverses: false)) {
+                        gradientAngle = .degrees(360)
+                    }
                 }
-
-                withAnimation(Animation.linear(duration: 2).repeatForever(autoreverses: true)) {
-                    gradientOpacity = 1
+            }
+            .onChange(of: isPopover) { popoverShowing in
+                if popoverShowing || isHovered {
+                    withAnimation(Animation.linear(duration: 2.5).repeatForever(autoreverses: false)) {
+                        gradientAngle = .degrees(360)
+                    }
+                } else {
+                    gradientAngle = .degrees(0)
                 }
             }
     }

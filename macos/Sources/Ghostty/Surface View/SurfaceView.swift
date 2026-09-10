@@ -25,6 +25,12 @@ extension Ghostty {
         // Monitor background processes on this surface
         @StateObject private var processMonitor = TerminalProcessMonitor()
 
+        // Serial device watcher
+        @ObservedObject private var serialWatcher = SerialDeviceWatcher.shared
+
+        // Ephemeral HUD toast for copied command output
+        @State private var copiedHudMessage: String?
+
         @EnvironmentObject private var ghostty: Ghostty.App
         @Environment(\.ghosttyLastFocusedSurface) private var lastFocusedSurface
 
@@ -136,6 +142,53 @@ extension Ghostty {
                 .padding(.top, 10)
                 .padding(.trailing, 10)
 
+                // Ephemeral Floating Alerts (Serial Device, Local Server Port, Copied HUD)
+                VStack(spacing: 8) {
+                    if let serial = serialWatcher.activeAlert, isFocusedSurface {
+                        SerialDeviceToast(
+                            device: serial,
+                            baudRate: $serialWatcher.selectedBaudRate,
+                            onConnect: { dev, baud in
+                                surfaceView.surfaceModel?.sendText("screen \(dev.bsdPath) \(baud)\n")
+                                serialWatcher.dismissAlert()
+                            },
+                            onDismiss: {
+                                serialWatcher.dismissAlert()
+                            }
+                        )
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
+                    }
+
+                    if let portInfo = processMonitor.activePortAlert, isFocusedSurface {
+                        LocalPortToast(
+                            portInfo: portInfo,
+                            onDismiss: {
+                                processMonitor.dismissPortAlert()
+                            }
+                        )
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
+                    }
+
+                    if let msg = copiedHudMessage, isFocusedSurface {
+                        CopiedHudToast(message: msg)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .move(edge: .top).combined(with: .opacity)
+                            ))
+                    }
+                }
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: serialWatcher.activeAlert)
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: processMonitor.activePortAlert)
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: copiedHudMessage)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, 12)
+
                 // Search overlay
                 if let searchState = surfaceView.searchState {
                     SurfaceSearchOverlay(
@@ -186,9 +239,27 @@ extension Ghostty {
             }
             .onAppear {
                 processMonitor.setSurfaceView(surfaceView)
+                processMonitor.isFocused = isFocusedSurface && windowFocus
             }
             .onChange(of: surfaceView) { newView in
                 processMonitor.setSurfaceView(newView)
+            }
+            .onChange(of: isFocusedSurface) { focused in
+                processMonitor.isFocused = focused && windowFocus
+            }
+            .onChange(of: windowFocus) { winFocused in
+                processMonitor.isFocused = isFocusedSurface && winFocused
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .ghosttyCopiedOutput)) { notif in
+                guard let targetUUID = notif.userInfo?["surfaceUUID"] as? UUID,
+                      targetUUID == surfaceView.id else { return }
+                copiedHudMessage = "Copied command output"
+                Task {
+                    try? await Task.sleep(nanoseconds: 1_800_000_000)
+                    if copiedHudMessage == "Copied command output" {
+                        copiedHudMessage = nil
+                    }
+                }
             }
         }
     }
@@ -1205,3 +1276,8 @@ extension FocusedValues {
         typealias Value = CGSize
     }
 }
+
+extension Notification.Name {
+    static let ghosttyCopiedOutput = Notification.Name("GhosttyCopiedOutputNotification")
+}
+

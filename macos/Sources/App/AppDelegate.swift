@@ -41,6 +41,7 @@ class AppDelegate: NSObject,
     @IBOutlet private var menuUndo: NSMenuItem?
     @IBOutlet private var menuRedo: NSMenuItem?
     @IBOutlet private var menuCopy: NSMenuItem?
+    private var menuCopyLastCommandOutput: NSMenuItem?
     @IBOutlet private var menuPaste: NSMenuItem?
     @IBOutlet private var menuPasteSelection: NSMenuItem?
     @IBOutlet private var menuSelectAll: NSMenuItem?
@@ -1195,6 +1196,22 @@ extension AppDelegate {
         syncMenuShortcut(config, action: "undo", menuItem: self.menuUndo)
         syncMenuShortcut(config, action: "redo", menuItem: self.menuRedo)
         syncMenuShortcut(config, action: "copy_to_clipboard", menuItem: self.menuCopy)
+
+        // Add "Copy Last Command Output" after "Copy" in the Edit menu
+        if self.menuCopyLastCommandOutput == nil,
+           let copyItem = self.menuCopy,
+           let editMenu = copyItem.menu {
+            let index = editMenu.index(of: copyItem) + 1
+            let item = NSMenuItem(
+                title: "Copy Last Command Output",
+                action: #selector(copyLastCommandOutput(_:)),
+                keyEquivalent: "C"
+            )
+            item.keyEquivalentModifierMask = [.command, .shift]
+            editMenu.insertItem(item, at: index)
+            self.menuCopyLastCommandOutput = item
+        }
+        syncMenuShortcut(config, action: "copy_last_command_output", menuItem: self.menuCopyLastCommandOutput)
         syncMenuShortcut(config, action: "paste_from_clipboard", menuItem: self.menuPaste)
         syncMenuShortcut(config, action: "paste_from_selection", menuItem: self.menuPasteSelection)
         syncMenuShortcut(config, action: "select_all", menuItem: self.menuSelectAll)
@@ -1249,6 +1266,17 @@ extension AppDelegate {
 
     @MainActor func performGhosttyBindingMenuKeyEquivalent(with event: NSEvent) -> Bool {
         menuShortcutManager.performGhosttyBindingMenuKeyEquivalent(with: event)
+    }
+
+    @IBAction func copyLastCommandOutput(_ sender: Any?) {
+        guard let controller = NSApp.keyWindow?.windowController as? BaseTerminalController,
+              let surface = controller.focusedSurface else { return }
+        controller.performAction("copy_last_command_output", on: surface)
+        NotificationCenter.default.post(
+            name: .ghosttyCopiedOutput,
+            object: nil,
+            userInfo: ["surfaceUUID": surface.id]
+        )
     }
 }
 
