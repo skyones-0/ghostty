@@ -959,7 +959,11 @@ class AppDelegate: NSObject,
         var config = Ghostty.SurfaceConfiguration()
         let binPath = Bundle.main.executablePath ?? "ghostty"
         config.command = "\(binPath) +config"
-        _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
+        if let parent = TerminalController.preferredParent?.window {
+            _ = TerminalController.newTab(ghostty, from: parent, withBaseConfig: config)
+        } else {
+            _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
+        }
     }
 
     @IBAction func reloadConfig(_ sender: Any?) {

@@ -34,9 +34,9 @@ const Category = enum(usize) {
         return switch (self) {
             .themes => "🎨 Themes & Colors",
             .typography => "🔤 Typography & Font",
-            .window => "🪟 Window & Blur",
+            .window => "🪟 Window & Styling",
             .cursor => "🖱️ Cursor & Mouse",
-            .behavior => "⚡ Behavior & Shortcuts",
+            .behavior => "⚡ Behavior & Terminal",
         };
     }
 
@@ -48,6 +48,15 @@ const Category = enum(usize) {
             .cursor => "[4] Cursor",
             .behavior => "[5] Behavior",
         };
+    }
+};
+
+const ThemeEntry = struct {
+    name: []const u8,
+    path: []const u8,
+
+    fn lessThan(_: void, lhs: ThemeEntry, rhs: ThemeEntry) bool {
+        return std.ascii.orderIgnoreCase(lhs.name, rhs.name) == .lt;
     }
 };
 
@@ -64,6 +73,11 @@ const SettingItem = struct {
     doc: []const u8,
     category: Category,
     setting_type: SettingType,
+
+    // Default string value according to Ghostty defaults
+    default_str: []const u8,
+    // Value loaded from user's file (null if absent)
+    initial_file_val: ?[]const u8 = null,
 
     // For choice
     choices: []const []const u8 = &.{},
@@ -98,12 +112,45 @@ const SettingItem = struct {
                 return if (self.bool_val) "true" else "false";
             },
             .number_float => {
-                return std.fmt.bufPrint(buf, "{d:.2}", .{self.float_val}) catch "0.0";
+                return std.fmt.bufPrint(buf, "{d:.2}", .{self.float_val}) catch "0.00";
             },
             .number_int => {
                 return std.fmt.bufPrint(buf, "{d}", .{self.int_val}) catch "0";
             },
         }
+    }
+
+    pub fn isChangedFromDefault(self: *const SettingItem) bool {
+        var buf: [128]u8 = undefined;
+        const current = self.valueString(&buf);
+        return !std.ascii.eqlIgnoreCase(current, self.default_str);
+    }
+
+    pub fn resetToDefault(self: *SettingItem) void {
+        switch (self.setting_type) {
+            .choice => {
+                for (self.choices, 0..) |ch, idx| {
+                    if (std.ascii.eqlIgnoreCase(ch, self.default_str)) {
+                        self.choice_idx = idx;
+                        break;
+                    }
+                }
+            },
+            .boolean => {
+                self.bool_val = std.mem.eql(u8, self.default_str, "true");
+            },
+            .number_float => {
+                if (std.fmt.parseFloat(f64, self.default_str)) |fv| {
+                    self.float_val = fv;
+                } else |_| {}
+            },
+            .number_int => {
+                if (std.fmt.parseInt(i64, self.default_str, 10)) |iv| {
+                    self.int_val = iv;
+                } else |_| {}
+            },
+        }
+        self.modified = true;
     }
 
     pub fn next(self: *SettingItem) void {
@@ -177,10 +224,10 @@ const Studio = struct {
     show_help: bool = false,
     save_status: ?[]const u8 = null,
 
-    // Discovered theme names
-    theme_names: std.ArrayList([]const u8),
-    theme_paths: std.ArrayList([]const u8),
+    // Discovered themes list
+    themes: std.ArrayList(ThemeEntry),
     selected_theme_idx: usize = 0,
+    initial_theme_in_file: ?[]const u8 = null,
 
     // Settings list
     settings: std.ArrayList(SettingItem),
@@ -222,8 +269,7 @@ const Studio = struct {
             .env_map = try global.environMap(),
             .vx = undefined,
             .mouse = null,
-            .theme_names = .empty,
-            .theme_paths = .empty,
+            .themes = .empty,
             .settings = .empty,
         };
         self.vx = try vaxis.init(global.io(), allocator, &self.env_map, .{});
@@ -237,11 +283,19 @@ const Studio = struct {
 
     pub fn deinit(self: *Studio) void {
         const allocator = self.allocator;
+        for (self.settings.items) |item| {
+            if (item.initial_file_val) |v| allocator.free(v);
+        }
         self.settings.deinit(allocator);
-        for (self.theme_names.items) |t| allocator.free(t);
-        for (self.theme_paths.items) |p| allocator.free(p);
-        self.theme_names.deinit(allocator);
-        self.theme_paths.deinit(allocator);
+
+        for (self.themes.items) |t| {
+            allocator.free(t.name);
+            allocator.free(t.path);
+        }
+        self.themes.deinit(allocator);
+
+        if (self.initial_theme_in_file) |t| allocator.free(t);
+
         self.vx.deinit(allocator, self.tty.writer());
         self.env_map.deinit();
         self.tty.deinit();
@@ -259,23 +313,39 @@ const Studio = struct {
                 if (entry.kind != .file and entry.kind != .sym_link) continue;
                 if (std.mem.eql(u8, entry.name, ".DS_Store")) continue;
 
+                var already = false;
+                for (self.themes.items) |existing| {
+                    if (std.mem.eql(u8, existing.name, entry.name)) {
+                        already = true;
+                        break;
+                    }
+                }
+                if (already) continue;
+
                 const path = try std.fs.path.join(self.allocator, &.{ loc.dir, entry.name });
-                try self.theme_names.append(self.allocator, try self.allocator.dupe(u8, entry.name));
-                try self.theme_paths.append(self.allocator, path);
+                try self.themes.append(self.allocator, .{
+                    .name = try self.allocator.dupe(u8, entry.name),
+                    .path = path,
+                });
             }
         }
+
+        std.mem.sortUnstable(ThemeEntry, self.themes.items, {}, ThemeEntry.lessThan);
     }
 
     fn initSettings(self: *Studio) !void {
         const alloc = self.allocator;
 
-        // --- Typography ---
+        // ==========================================
+        // Category 1: Typography & Fonts
+        // ==========================================
         try self.settings.append(alloc, .{
             .key = "font-family",
             .label = "Font Family",
-            .doc = "Specifies the primary font family for terminal text rendering.",
+            .doc = "Primary font family for terminal rendering. Requires full restart or redraw.",
             .category = .typography,
             .setting_type = .choice,
+            .default_str = "MesloLGS NF",
             .choices = &.{
                 "MesloLGS NF",
                 "JetBrains Mono",
@@ -286,6 +356,9 @@ const Studio = struct {
                 "Hack",
                 "Cascadia Code",
                 "Inconsolata",
+                "Source Code Pro",
+                "DejaVu Sans Mono",
+                "Ubuntu Mono",
             },
             .choice_idx = 0,
         });
@@ -293,142 +366,317 @@ const Studio = struct {
         try self.settings.append(alloc, .{
             .key = "font-size",
             .label = "Font Size (pt)",
-            .doc = "Font size in points for main terminal characters.",
+            .doc = "Main terminal font size in points.",
             .category = .typography,
             .setting_type = .number_float,
+            .default_str = "14.00",
             .float_val = 14.0,
             .float_min = 8.0,
-            .float_max = 32.0,
+            .float_max = 36.0,
             .float_step = 0.5,
         });
 
         try self.settings.append(alloc, .{
             .key = "font-thicken",
-            .label = "Font Thicken (Boldness)",
-            .doc = "Slightly thickens font glyph strokes for better readability on Retina displays.",
+            .label = "Font Thicken (Retina)",
+            .doc = "Thickens glyph strokes slightly for enhanced readability on high-DPI screens.",
             .category = .typography,
             .setting_type = .boolean,
-            .bool_val = true,
+            .default_str = "false",
+            .bool_val = false,
         });
 
         try self.settings.append(alloc, .{
             .key = "adjust-cell-width",
-            .label = "Adjust Cell Width",
-            .doc = "Adjusts width of each character cell by a percentage relative to font height.",
+            .label = "Adjust Cell Width (%)",
+            .doc = "Horizontal character cell spacing adjustment relative to font width.",
             .category = .typography,
             .setting_type = .number_int,
+            .default_str = "0",
             .int_val = 0,
-            .int_min = -15,
-            .int_max = 25,
+            .int_min = -20,
+            .int_max = 50,
             .int_step = 1,
         });
 
         try self.settings.append(alloc, .{
             .key = "adjust-cell-height",
-            .label = "Adjust Cell Height",
-            .doc = "Adjusts line spacing / vertical cell height relative to the font.",
+            .label = "Adjust Cell Height (%)",
+            .doc = "Vertical line spacing adjustment relative to font line height.",
             .category = .typography,
             .setting_type = .number_int,
+            .default_str = "0",
             .int_val = 0,
-            .int_min = -15,
-            .int_max = 25,
+            .int_min = -20,
+            .int_max = 50,
             .int_step = 1,
         });
 
-        // --- Window & Blur ---
+        try self.settings.append(alloc, .{
+            .key = "adjust-font-baseline",
+            .label = "Font Baseline Offset (%)",
+            .doc = "Vertical position shift for font rendering baseline.",
+            .category = .typography,
+            .setting_type = .number_int,
+            .default_str = "0",
+            .int_val = 0,
+            .int_min = -20,
+            .int_max = 20,
+            .int_step = 1,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "adjust-underline-position",
+            .label = "Underline Position",
+            .doc = "Offset in pixels for underline and strike-through decoration.",
+            .category = .typography,
+            .setting_type = .number_int,
+            .default_str = "0",
+            .int_val = 0,
+            .int_min = -10,
+            .int_max = 10,
+            .int_step = 1,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "adjust-underline-thickness",
+            .label = "Underline Thickness (%)",
+            .doc = "Stroke thickness of underlines as a percentage of standard stroke.",
+            .category = .typography,
+            .setting_type = .number_int,
+            .default_str = "100",
+            .int_val = 100,
+            .int_min = 20,
+            .int_max = 300,
+            .int_step = 10,
+        });
+
+        // ==========================================
+        // Category 2: Window & Styling (including fork features)
+        // ==========================================
         try self.settings.append(alloc, .{
             .key = "background-opacity",
             .label = "Background Opacity",
-            .doc = "Controls window transparency (0.10 = fully transparent, 1.00 = completely opaque).",
+            .doc = "Window transparency from 0.10 (translucent) to 1.00 (fully opaque).",
             .category = .window,
             .setting_type = .number_float,
-            .float_val = 0.95,
+            .default_str = "1.00",
+            .float_val = 1.0,
             .float_min = 0.10,
-            .float_max = 1.00,
+            .float_max = 1.0,
             .float_step = 0.05,
         });
 
         try self.settings.append(alloc, .{
             .key = "background-blur",
             .label = "Background Blur Radius",
-            .doc = "Applies a native macOS Gaussian backdrop blur behind transparent windows.",
+            .doc = "Gaussian blur radius behind transparent background on macOS.",
             .category = .window,
             .setting_type = .number_int,
-            .int_val = 20,
+            .default_str = "0",
+            .int_val = 0,
             .int_min = 0,
-            .int_max = 50,
+            .int_max = 100,
             .int_step = 5,
         });
 
         try self.settings.append(alloc, .{
-            .key = "window-padding-x",
-            .label = "Horizontal Padding",
-            .doc = "Sets left and right margin padding inside terminal surfaces in pixels.",
-            .category = .window,
-            .setting_type = .number_int,
-            .int_val = 6,
-            .int_min = 0,
-            .int_max = 40,
-            .int_step = 2,
-        });
-
-        try self.settings.append(alloc, .{
-            .key = "window-padding-y",
-            .label = "Vertical Padding",
-            .doc = "Sets top and bottom margin padding inside terminal surfaces in pixels.",
-            .category = .window,
-            .setting_type = .number_int,
-            .int_val = 6,
-            .int_min = 0,
-            .int_max = 40,
-            .int_step = 2,
-        });
-
-        try self.settings.append(alloc, .{
-            .key = "window-padding-balance",
-            .label = "Balance Padding",
-            .doc = "Distributes leftover terminal grid remainder evenly across opposite margins.",
+            .key = "macos-topbar",
+            .label = "macOS Top Bar (Fork)",
+            .doc = "Enables the modern macOS top bar with path, split controls, and sidebar toggle.",
             .category = .window,
             .setting_type = .boolean,
+            .default_str = "true",
+            .bool_val = true,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "macos-topbar-palette",
+            .label = "Topbar Palette Button (Fork)",
+            .doc = "Shows the Command Palette shortcut button in the macOS top bar.",
+            .category = .window,
+            .setting_type = .boolean,
+            .default_str = "true",
             .bool_val = true,
         });
 
         try self.settings.append(alloc, .{
             .key = "macos-titlebar-style",
-            .label = "Titlebar Style",
-            .doc = "macOS window titlebar appearance: system, transparent, tabs, or hidden.",
+            .label = "macOS Titlebar Style",
+            .doc = "Visual style of the window titlebar chrome.",
             .category = .window,
             .setting_type = .choice,
-            .choices = &.{ "system", "transparent", "tabs", "hidden" },
-            .choice_idx = 1,
+            .default_str = "transparent",
+            .choices = &.{ "transparent", "native", "tabs", "hidden" },
+            .choice_idx = 0,
         });
 
         try self.settings.append(alloc, .{
-            .key = "macos-topbar",
-            .label = "Top Navigation Bar",
-            .doc = "Enables the streamlined top bar showing active process, CWD, and background jobs.",
+            .key = "macos-titlebar-proxy-icon",
+            .label = "Titlebar Proxy Icon",
+            .doc = "Visibility of the document proxy icon in the macOS window titlebar.",
+            .category = .window,
+            .setting_type = .choice,
+            .default_str = "visible",
+            .choices = &.{ "visible", "hidden" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "macos-window-buttons",
+            .label = "Traffic Light Buttons",
+            .doc = "Visibility of macOS close, minimize, and zoom buttons.",
+            .category = .window,
+            .setting_type = .choice,
+            .default_str = "visible",
+            .choices = &.{ "visible", "hidden" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "macos-window-shadow",
+            .label = "macOS Window Shadow",
+            .doc = "Draws the standard macOS drop shadow around terminal windows.",
             .category = .window,
             .setting_type = .boolean,
+            .default_str = "true",
             .bool_val = true,
         });
 
         try self.settings.append(alloc, .{
             .key = "macos-icon",
-            .label = "Application Dock Icon",
-            .doc = "Selects the Ghostty Dock icon design: official, glass, retro, chalkboard, etc.",
+            .label = "Dock App Icon",
+            .doc = "Custom icon variant rendered in macOS Dock and App Switcher.",
             .category = .window,
             .setting_type = .choice,
-            .choices = &.{ "official", "glass", "retro", "paper", "chalkboard", "blueprint", "microchip" },
-            .choice_idx = 1,
+            .default_str = "official",
+            .choices = &.{ "official", "glass", "retro", "chalk", "paper", "blueprint", "hologram" },
+            .choice_idx = 0,
         });
 
-        // --- Cursor & Mouse ---
+        try self.settings.append(alloc, .{
+            .key = "macos-non-native-fullscreen",
+            .label = "Fullscreen Behavior",
+            .doc = "Non-native macOS fullscreen (fast, overlay, or visible-menu).",
+            .category = .window,
+            .setting_type = .choice,
+            .default_str = "false",
+            .choices = &.{ "false", "true", "visible-menu" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "macos-dock-drop-behavior",
+            .label = "Dock Icon Drop Action",
+            .doc = "Action taken when files or directories are dragged to Ghostty dock icon.",
+            .category = .window,
+            .setting_type = .choice,
+            .default_str = "new-tab",
+            .choices = &.{ "new-tab", "new-window" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "window-padding-x",
+            .label = "Window Padding X (px)",
+            .doc = "Horizontal margin padding between terminal text grid and window border.",
+            .category = .window,
+            .setting_type = .number_int,
+            .default_str = "0",
+            .int_val = 0,
+            .int_min = 0,
+            .int_max = 64,
+            .int_step = 2,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "window-padding-y",
+            .label = "Window Padding Y (px)",
+            .doc = "Vertical margin padding between terminal text grid and window border.",
+            .category = .window,
+            .setting_type = .number_int,
+            .default_str = "0",
+            .int_val = 0,
+            .int_min = 0,
+            .int_max = 64,
+            .int_step = 2,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "window-padding-balance",
+            .label = "Balance Window Padding",
+            .doc = "Evenly balances remaining grid margin space across all sides.",
+            .category = .window,
+            .setting_type = .boolean,
+            .default_str = "false",
+            .bool_val = false,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "window-padding-color",
+            .label = "Padding Color",
+            .doc = "Color filled in the padding margins (background or extended text background).",
+            .category = .window,
+            .setting_type = .choice,
+            .default_str = "background",
+            .choices = &.{ "background", "extend" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "window-save-state",
+            .label = "Window State Restoration",
+            .doc = "Persist and restore open windows, tabs, and positions on launch.",
+            .category = .window,
+            .setting_type = .choice,
+            .default_str = "default",
+            .choices = &.{ "default", "always", "never" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "window-colorspace",
+            .label = "Color Space",
+            .doc = "Output color space (standard sRGB or Apple wide-gamut Display P3).",
+            .category = .window,
+            .setting_type = .choice,
+            .default_str = "srgb",
+            .choices = &.{ "srgb", "display-p3" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "window-theme",
+            .label = "Window Chrome Theme",
+            .doc = "Operating system appearance theme for window decorations.",
+            .category = .window,
+            .setting_type = .choice,
+            .default_str = "auto",
+            .choices = &.{ "auto", "system", "dark", "light" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "split-divider-color",
+            .label = "Split Divider Color",
+            .doc = "Hex color string for split pane border lines.",
+            .category = .window,
+            .setting_type = .choice,
+            .default_str = "auto",
+            .choices = &.{ "auto", "#FFEAA7", "#3C3836", "#504945", "#282828", "#FABD2F" },
+            .choice_idx = 0,
+        });
+
+        // ==========================================
+        // Category 3: Cursor & Mouse
+        // ==========================================
         try self.settings.append(alloc, .{
             .key = "cursor-style",
-            .label = "Cursor Shape",
-            .doc = "Terminal cursor glyph shape: block, bar, or underline.",
+            .label = "Cursor Style",
+            .doc = "Visual shape of the terminal text cursor.",
             .category = .cursor,
             .setting_type = .choice,
+            .default_str = "block",
             .choices = &.{ "block", "bar", "underline" },
             .choice_idx = 0,
         });
@@ -436,70 +684,345 @@ const Studio = struct {
         try self.settings.append(alloc, .{
             .key = "cursor-style-blink",
             .label = "Cursor Blinking",
-            .doc = "Toggles cursor blinking animation when terminal is active.",
+            .doc = "Controls cursor blink animation behavior.",
             .category = .cursor,
-            .setting_type = .boolean,
-            .bool_val = false,
+            .setting_type = .choice,
+            .default_str = "false",
+            .choices = &.{ "false", "true", "system" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "cursor-color",
+            .label = "Cursor Color",
+            .doc = "Custom color for the cursor instead of inverting foreground/background.",
+            .category = .cursor,
+            .setting_type = .choice,
+            .default_str = "auto",
+            .choices = &.{ "auto", "#FABD2F", "#B8BB26", "#83A598", "#FB4934", "#EBDBB2", "#FFFFFF" },
+            .choice_idx = 0,
         });
 
         try self.settings.append(alloc, .{
             .key = "cursor-opacity",
             .label = "Cursor Opacity",
-            .doc = "Controls cursor visual opacity (0.1 to 1.0).",
+            .doc = "Transparency level of the cursor from 0.10 to 1.00.",
             .category = .cursor,
             .setting_type = .number_float,
+            .default_str = "1.00",
             .float_val = 1.0,
-            .float_min = 0.1,
+            .float_min = 0.10,
             .float_max = 1.0,
-            .float_step = 0.1,
+            .float_step = 0.05,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "adjust-cursor-thickness",
+            .label = "Cursor Thickness (%)",
+            .doc = "Stroke thickness for bar and underline cursor shapes.",
+            .category = .cursor,
+            .setting_type = .number_int,
+            .default_str = "0",
+            .int_val = 0,
+            .int_min = 0,
+            .int_max = 100,
+            .int_step = 5,
         });
 
         try self.settings.append(alloc, .{
             .key = "mouse-hide-while-typing",
             .label = "Hide Mouse While Typing",
-            .doc = "Automatically conceals the mouse cursor whenever keys are pressed.",
+            .doc = "Automatically hides mouse cursor when keyboard keys are pressed.",
             .category = .cursor,
             .setting_type = .boolean,
-            .bool_val = true,
+            .default_str = "false",
+            .bool_val = false,
         });
 
-        // --- Behavior & Shortcuts ---
+        try self.settings.append(alloc, .{
+            .key = "mouse-shift-capture",
+            .label = "Shift Mouse Bypass",
+            .doc = "Holding Shift bypasses terminal mouse reporting for native text selection.",
+            .category = .cursor,
+            .setting_type = .choice,
+            .default_str = "true",
+            .choices = &.{ "true", "false", "never", "always" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "mouse-scroll-multiplier",
+            .label = "Mouse Scroll Speed",
+            .doc = "Multiplier scaling the scroll speed of mouse wheels and trackpads.",
+            .category = .cursor,
+            .setting_type = .number_float,
+            .default_str = "1.00",
+            .float_val = 1.0,
+            .float_min = 0.25,
+            .float_max = 5.0,
+            .float_step = 0.25,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "right-click-action",
+            .label = "Right-Click Action",
+            .doc = "Action performed on right-clicking: open context menu or paste clipboard.",
+            .category = .cursor,
+            .setting_type = .choice,
+            .default_str = "context-menu",
+            .choices = &.{ "context-menu", "paste" },
+            .choice_idx = 0,
+        });
+
         try self.settings.append(alloc, .{
             .key = "copy-on-select",
             .label = "Copy on Select",
-            .doc = "Automatically copies highlighted text directly to the system clipboard.",
-            .category = .behavior,
+            .doc = "Automatically copies highlighted text to system or primary clipboard.",
+            .category = .cursor,
             .setting_type = .choice,
-            .choices = &.{ "clipboard", "true", "false" },
+            .default_str = "false",
+            .choices = &.{ "false", "clipboard", "primary" },
             .choice_idx = 0,
         });
 
         try self.settings.append(alloc, .{
-            .key = "macos-option-as-alt",
-            .label = "Option Key as Alt",
-            .doc = "Configures macOS Option keys to emit Alt/Meta escape codes in CLI programs.",
+            .key = "selection-clear-on-typing",
+            .label = "Clear Selection on Typing",
+            .doc = "Clears active text selection when any key is pressed.",
+            .category = .cursor,
+            .setting_type = .boolean,
+            .default_str = "true",
+            .bool_val = true,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "selection-clear-on-copy",
+            .label = "Clear Selection on Copy",
+            .doc = "Clears active text selection immediately after copying.",
+            .category = .cursor,
+            .setting_type = .boolean,
+            .default_str = "false",
+            .bool_val = false,
+        });
+
+        // ==========================================
+        // Category 4: Behavior, Terminal & Quick Features
+        // ==========================================
+        try self.settings.append(alloc, .{
+            .key = "quick-terminal-position",
+            .label = "Quick Terminal Position",
+            .doc = "Screen edge where the Quake-style dropdown terminal appears.",
             .category = .behavior,
             .setting_type = .choice,
-            .choices = &.{ "true", "left", "right", "false" },
+            .default_str = "top",
+            .choices = &.{ "top", "bottom", "left", "right" },
             .choice_idx = 0,
         });
 
         try self.settings.append(alloc, .{
-            .key = "window-inherit-working-directory",
-            .label = "Inherit Working Directory",
-            .doc = "New windows and tabs automatically open in the active terminal's current directory.",
+            .key = "quick-terminal-size",
+            .label = "Quick Terminal Size",
+            .doc = "Screen coverage percentage of the dropdown quick terminal.",
+            .category = .behavior,
+            .setting_type = .choice,
+            .default_str = "30%",
+            .choices = &.{ "20%", "30%", "40%", "50%", "60%", "80%" },
+            .choice_idx = 1,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "quick-terminal-autohide",
+            .label = "Quick Terminal Auto-Hide",
+            .doc = "Automatically closes the dropdown terminal when focus is lost.",
             .category = .behavior,
             .setting_type = .boolean,
+            .default_str = "true",
             .bool_val = true,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "quick-terminal-animation-duration",
+            .label = "Quick Terminal Slide (s)",
+            .doc = "Slide animation duration in seconds for quick terminal appearance.",
+            .category = .behavior,
+            .setting_type = .number_float,
+            .default_str = "0.20",
+            .float_val = 0.20,
+            .float_min = 0.0,
+            .float_max = 0.6,
+            .float_step = 0.05,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "scrollback-limit",
+            .label = "Scrollback Buffer (Bytes)",
+            .doc = "Maximum memory limit in bytes allocated for terminal history lines.",
+            .category = .behavior,
+            .setting_type = .choice,
+            .default_str = "10485760",
+            .choices = &.{ "1073741824", "104857600", "10485760", "1048576", "524288" },
+            .choice_idx = 2,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "scroll-to-bottom",
+            .label = "Scroll to Bottom Mode",
+            .doc = "When to automatically snap scroll view back to bottom prompt.",
+            .category = .behavior,
+            .setting_type = .choice,
+            .default_str = "all",
+            .choices = &.{ "all", "keystroke, no-output", "no-output", "keystroke", "none" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "bell-features",
+            .label = "Bell Features",
+            .doc = "Terminal audio/visual alert behavior on terminal BEL character.",
+            .category = .behavior,
+            .setting_type = .choice,
+            .default_str = "system",
+            .choices = &.{ "system", "audio", "visual", "attention", "none" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "bell-audio-volume",
+            .label = "Bell Audio Volume",
+            .doc = "Volume level for custom terminal bell sound (0.0 to 1.0).",
+            .category = .behavior,
+            .setting_type = .number_float,
+            .default_str = "1.00",
+            .float_val = 1.0,
+            .float_min = 0.0,
+            .float_max = 1.0,
+            .float_step = 0.1,
         });
 
         try self.settings.append(alloc, .{
             .key = "confirm-close-surface",
-            .label = "Confirm Close When Running",
-            .doc = "Prompts for confirmation before closing tabs or windows with active processes.",
+            .label = "Confirm Close Surface",
+            .doc = "Displays confirmation alert before closing terminal tab or split.",
             .category = .behavior,
             .setting_type = .boolean,
+            .default_str = "true",
+            .bool_val = true,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "quit-after-last-window-closed",
+            .label = "Quit on Window Close",
+            .doc = "Quits the entire macOS Ghostty application when the last window closes.",
+            .category = .behavior,
+            .setting_type = .boolean,
+            .default_str = "false",
             .bool_val = false,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "notify-on-command-finish",
+            .label = "Command Finish Alerts",
+            .doc = "Send desktop notification when long-running shell commands complete.",
+            .category = .behavior,
+            .setting_type = .choice,
+            .default_str = "never",
+            .choices = &.{ "never", "always", "unfocused" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "notify-on-command-finish-action",
+            .label = "Command Alert Action",
+            .doc = "Notification style for completed background commands.",
+            .category = .behavior,
+            .setting_type = .choice,
+            .default_str = "bell",
+            .choices = &.{ "bell", "notify" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "clipboard-read",
+            .label = "Clipboard Read Policy",
+            .doc = "Security prompt policy when terminal programs request reading clipboard.",
+            .category = .behavior,
+            .setting_type = .choice,
+            .default_str = "ask",
+            .choices = &.{ "ask", "allow", "deny" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "clipboard-write",
+            .label = "Clipboard Write Policy",
+            .doc = "Security prompt policy when terminal programs write to system clipboard.",
+            .category = .behavior,
+            .setting_type = .choice,
+            .default_str = "allow",
+            .choices = &.{ "allow", "ask", "deny" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "clipboard-trim-trailing-spaces",
+            .label = "Trim Trailing Spaces",
+            .doc = "Strips useless trailing whitespace characters when copying text.",
+            .category = .behavior,
+            .setting_type = .boolean,
+            .default_str = "false",
+            .bool_val = false,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "clipboard-paste-protection",
+            .label = "Paste Protection Alert",
+            .doc = "Warns before pasting commands with newlines to prevent accidental execution.",
+            .category = .behavior,
+            .setting_type = .boolean,
+            .default_str = "true",
+            .bool_val = true,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "clipboard-paste-bracketed-safe",
+            .label = "Bracketed Paste Safety",
+            .doc = "Prevents bracketed paste bypasses by escaping special terminal sequences.",
+            .category = .behavior,
+            .setting_type = .boolean,
+            .default_str = "true",
+            .bool_val = true,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "working-directory",
+            .label = "New Tab Working Directory",
+            .doc = "Initial working directory for new windows, tabs, and splits.",
+            .category = .behavior,
+            .setting_type = .choice,
+            .default_str = "home",
+            .choices = &.{ "home", "current", "previous" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "auto-update",
+            .label = "Auto Update Mode",
+            .doc = "Automatic background update check and download mode on macOS.",
+            .category = .behavior,
+            .setting_type = .choice,
+            .default_str = "off",
+            .choices = &.{ "off", "check", "download" },
+            .choice_idx = 0,
+        });
+
+        try self.settings.append(alloc, .{
+            .key = "custom-shader-animation",
+            .label = "Custom Shader Animation",
+            .doc = "Continuously animate GLSL custom shader effects (e.g. bloom, crt).",
+            .category = .behavior,
+            .setting_type = .boolean,
+            .default_str = "true",
+            .bool_val = true,
         });
     }
 
@@ -518,83 +1041,68 @@ const Studio = struct {
             const line = std.mem.trim(u8, raw_line, " \t\r");
             if (line.len == 0 or line[0] == '#') continue;
 
-                if (std.mem.indexOfScalar(u8, line, '=')) |eq_idx| {
-                    const key = std.mem.trim(u8, line[0..eq_idx], " \t");
-                    var val = std.mem.trim(u8, line[eq_idx + 1 ..], " \t");
-                    if (val.len >= 2 and val[0] == '"' and val[val.len - 1] == '"') {
-                        val = val[1 .. val.len - 1];
-                    }
+            if (std.mem.indexOfScalar(u8, line, '=')) |eq_idx| {
+                const key = std.mem.trim(u8, line[0..eq_idx], " \t");
+                var val = std.mem.trim(u8, line[eq_idx + 1 ..], " \t");
+                if (val.len >= 2 and val[0] == '"' and val[val.len - 1] == '"') {
+                    val = val[1 .. val.len - 1];
+                }
 
-                    if (std.mem.eql(u8, key, "theme")) {
-                        for (self.theme_names.items, 0..) |tname, idx| {
-                            if (std.ascii.eqlIgnoreCase(tname, val)) {
-                                self.selected_theme_idx = idx;
-                                break;
-                            }
-                        }
-                    }
+                if (std.mem.eql(u8, key, "theme")) {
+                    if (self.initial_theme_in_file) |t| self.allocator.free(t);
+                    self.initial_theme_in_file = self.allocator.dupe(u8, val) catch null;
 
-                    for (self.settings.items) |*item| {
-                        if (std.mem.eql(u8, item.key, key)) {
-                            switch (item.setting_type) {
-                                .boolean => {
-                                    item.bool_val = std.mem.eql(u8, val, "true");
-                                },
-                                .number_float => {
-                                    if (std.fmt.parseFloat(f64, val)) |fv| {
-                                        item.float_val = fv;
-                                    } else |_| {}
-                                },
-                                .number_int => {
-                                    if (std.fmt.parseInt(i64, val, 10)) |iv| {
-                                        item.int_val = iv;
-                                    } else |_| {}
-                                },
-                                .choice => {
-                                    for (item.choices, 0..) |ch, ch_idx| {
-                                        if (std.ascii.eqlIgnoreCase(ch, val)) {
-                                            item.choice_idx = ch_idx;
-                                            break;
-                                        }
-                                    }
-                                },
-                            }
+                    for (self.themes.items, 0..) |t, idx| {
+                        if (std.ascii.eqlIgnoreCase(t.name, val)) {
+                            self.selected_theme_idx = idx;
+                            self.cursor_idx = idx;
                             break;
                         }
                     }
                 }
+
+                for (self.settings.items) |*item| {
+                    if (std.mem.eql(u8, item.key, key)) {
+                        if (item.initial_file_val) |v| self.allocator.free(v);
+                        item.initial_file_val = self.allocator.dupe(u8, val) catch null;
+
+                        switch (item.setting_type) {
+                            .boolean => {
+                                item.bool_val = std.mem.eql(u8, val, "true");
+                            },
+                            .number_float => {
+                                if (std.fmt.parseFloat(f64, val)) |fv| {
+                                    item.float_val = fv;
+                                } else |_| {}
+                            },
+                            .number_int => {
+                                if (std.fmt.parseInt(i64, val, 10)) |iv| {
+                                    item.int_val = iv;
+                                } else |_| {}
+                            },
+                            .choice => {
+                                for (item.choices, 0..) |ch, ch_idx| {
+                                    if (std.ascii.eqlIgnoreCase(ch, val)) {
+                                        item.choice_idx = ch_idx;
+                                        break;
+                                    }
+                                }
+                            },
+                        }
+                        break;
+                    }
+                }
             }
+        }
 
         self.updateThemeColors();
     }
 
-    fn updateThemeColors(self: *Studio) void {
-        if (self.theme_paths.items.len == 0 or self.selected_theme_idx >= self.theme_paths.items.len) return;
-
-        const path = self.theme_paths.items[self.selected_theme_idx];
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
-        defer arena.deinit();
-
-        var cfg = Config.default(arena.allocator()) catch return;
-        defer cfg.deinit();
-
-        cfg.loadFile(arena.allocator(), path) catch return;
-
-        for (0..16) |i| {
-            self.palette[i] = .{
-                .rgb = [_]u8{
-                    cfg.palette.value[i].r,
-                    cfg.palette.value[i].g,
-                    cfg.palette.value[i].b,
-                },
-            };
+    fn findSetting(self: *Studio, key: []const u8) ?*SettingItem {
+        for (self.settings.items) |*item| {
+            if (std.mem.eql(u8, item.key, key)) return item;
         }
-        self.fg_color = .{
-            .rgb = [_]u8{ cfg.foreground.r, cfg.foreground.g, cfg.foreground.b },
-        };
-        self.bg_color = .{
-            .rgb = [_]u8{ cfg.background.r, cfg.background.g, cfg.background.b },
-        };
+        return null;
     }
 
     fn getActiveSetting(self: *Studio, index: usize) ?*SettingItem {
@@ -621,13 +1129,39 @@ const Studio = struct {
 
     fn activeItemCount(self: *Studio) usize {
         if (self.category == .themes) {
-            return self.theme_names.items.len;
+            return self.themes.items.len;
         }
         var count: usize = 0;
         for (self.settings.items) |item| {
             if (item.category == self.category) count += 1;
         }
         return count;
+    }
+
+    fn updateThemeColorsFor(self: *Studio, theme_idx: usize) void {
+        if (self.themes.items.len == 0 or theme_idx >= self.themes.items.len) return;
+
+        const path = self.themes.items[theme_idx].path;
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+
+        var cfg = Config.default(arena.allocator()) catch return;
+        cfg.loadFile(arena.allocator(), path) catch return;
+
+        inline for (0..16) |i| {
+            const rgb = cfg.palette.value[i];
+            self.palette[i] = .{ .rgb = [_]u8{ rgb.r, rgb.g, rgb.b } };
+        }
+        self.fg_color = .{
+            .rgb = [_]u8{ cfg.foreground.r, cfg.foreground.g, cfg.foreground.b },
+        };
+        self.bg_color = .{
+            .rgb = [_]u8{ cfg.background.r, cfg.background.g, cfg.background.b },
+        };
+    }
+
+    fn updateThemeColors(self: *Studio) void {
+        self.updateThemeColorsFor(self.selected_theme_idx);
     }
 
     pub fn start(self: *Studio) !void {
@@ -637,7 +1171,7 @@ const Studio = struct {
 
         const writer = self.tty.writer();
         try self.vx.enterAltScreen(writer);
-        try self.vx.setTitle(writer, "👻 Ghostty Configuration Studio (Zig TUI)");
+        try self.vx.setTitle(writer, "👻 Ghostty Configuration Studio");
         try self.vx.queryTerminal(writer, .fromSeconds(1));
         try self.vx.setMouseMode(writer, true);
 
@@ -674,7 +1208,11 @@ const Studio = struct {
                 }
 
                 // Switch tabs via 1..5 or Tab
-                if (key.matches('1', .{})) { self.category = .themes; self.cursor_idx = 0; return; }
+                if (key.matches('1', .{})) {
+                    self.category = .themes;
+                    self.cursor_idx = self.selected_theme_idx;
+                    return;
+                }
                 if (key.matches('2', .{})) { self.category = .typography; self.cursor_idx = 0; return; }
                 if (key.matches('3', .{})) { self.category = .window; self.cursor_idx = 0; return; }
                 if (key.matches('4', .{})) { self.category = .cursor; self.cursor_idx = 0; return; }
@@ -683,14 +1221,25 @@ const Studio = struct {
                 if (key.matches(vaxis.Key.tab, .{})) {
                     const next_cat = (@intFromEnum(self.category) + 1) % 5;
                     self.category = @enumFromInt(next_cat);
-                    self.cursor_idx = 0;
+                    self.cursor_idx = if (self.category == .themes) self.selected_theme_idx else 0;
                     return;
                 }
 
                 if (key.matches(vaxis.Key.tab, .{ .shift = true })) {
                     const prev_cat = if (@intFromEnum(self.category) == 0) 4 else @intFromEnum(self.category) - 1;
                     self.category = @enumFromInt(prev_cat);
-                    self.cursor_idx = 0;
+                    self.cursor_idx = if (self.category == .themes) self.selected_theme_idx else 0;
+                    return;
+                }
+
+                // Reset to default
+                if (key.matches('d', .{})) {
+                    if (self.category != .themes) {
+                        if (self.getActiveSetting(self.cursor_idx)) |item| {
+                            item.resetToDefault();
+                            self.save_status = "Reset to default. Press [s] to save.";
+                        }
+                    }
                     return;
                 }
 
@@ -710,8 +1259,7 @@ const Studio = struct {
                             self.cursor_idx -= 1;
                         }
                         if (self.category == .themes) {
-                            self.selected_theme_idx = self.cursor_idx;
-                            self.updateThemeColors();
+                            self.updateThemeColorsFor(self.cursor_idx);
                         }
                     }
                     return;
@@ -721,8 +1269,7 @@ const Studio = struct {
                     if (count > 0) {
                         self.cursor_idx = (self.cursor_idx + 1) % count;
                         if (self.category == .themes) {
-                            self.selected_theme_idx = self.cursor_idx;
-                            self.updateThemeColors();
+                            self.updateThemeColorsFor(self.cursor_idx);
                         }
                     }
                     return;
@@ -733,7 +1280,7 @@ const Studio = struct {
                     if (key.matchesAny(&.{ vaxis.Key.enter, ' ' }, .{})) {
                         self.selected_theme_idx = self.cursor_idx;
                         self.updateThemeColors();
-                        self.save_status = "Theme selected! Press [s] to write to config.";
+                        self.save_status = "✓ Theme applied! Press [s] to save to ~/.config/ghostty/config.";
                     }
                 } else {
                     if (self.getActiveSetting(self.cursor_idx)) |item| {
@@ -782,7 +1329,7 @@ const Studio = struct {
             }
         }
 
-        // Open file for write
+        // Open file for atomic write
         var out_file = try std.Io.Dir.createFileAbsolute(global.io(), path, .{ .truncate = true });
         defer out_file.close(global.io());
 
@@ -802,26 +1349,27 @@ const Studio = struct {
                 if (std.mem.indexOfScalar(u8, trimmed, '=')) |eq_pos| {
                     const key = std.mem.trim(u8, trimmed[0..eq_pos], " \t");
 
-                    if (std.mem.eql(u8, key, "theme") and self.theme_names.items.len > 0) {
-                        const theme_name = self.theme_names.items[self.selected_theme_idx];
+                    if (std.mem.eql(u8, key, "theme") and self.themes.items.len > 0) {
+                        const theme_name = self.themes.items[self.selected_theme_idx].name;
                         try w.interface.print("theme = \"{s}\"\n", .{theme_name});
                         try updated_keys.put("theme", {});
                         handled = true;
-                    } else {
-                        for (self.settings.items) |item| {
-                            if (std.mem.eql(u8, item.key, key)) {
-                                var val_buf: [128]u8 = undefined;
-                                const val_str = item.valueString(&val_buf);
-                                if (item.setting_type == .choice) {
-                                    try w.interface.print("{s} = \"{s}\"\n", .{ key, val_str });
-                                } else {
-                                    try w.interface.print("{s} = {s}\n", .{ key, val_str });
-                                }
-                                try updated_keys.put(item.key, {});
-                                handled = true;
-                                break;
+                    } else if (self.findSetting(key)) |item| {
+                        var val_buf: [128]u8 = undefined;
+                        const val_str = item.valueString(&val_buf);
+
+                        if (std.mem.eql(u8, val_str, item.default_str)) {
+                            // User returned value back to default: comment it out
+                            try w.interface.print("# {s} = {s}\n", .{ key, val_str });
+                        } else {
+                            if (item.setting_type == .choice) {
+                                try w.interface.print("{s} = \"{s}\"\n", .{ key, val_str });
+                            } else {
+                                try w.interface.print("{s} = {s}\n", .{ key, val_str });
                             }
                         }
+                        try updated_keys.put(item.key, {});
+                        handled = true;
                     }
                 }
             }
@@ -831,22 +1379,26 @@ const Studio = struct {
             }
         }
 
-        // Append any modified settings that were not previously present in file
-        if (!updated_keys.contains("theme") and self.theme_names.items.len > 0) {
-            const theme_name = self.theme_names.items[self.selected_theme_idx];
-            try w.interface.print("\ntheme = \"{s}\"\n", .{theme_name});
-        }
-
+        // For settings NOT present in user's file:
+        // ONLY append them if they differ from Ghostty default!
         for (self.settings.items) |item| {
-            if (!updated_keys.contains(item.key) and item.modified) {
-                var val_buf: [128]u8 = undefined;
-                const val_str = item.valueString(&val_buf);
-                if (item.setting_type == .choice) {
-                    try w.interface.print("{s} = \"{s}\"\n", .{ item.key, val_str });
-                } else {
-                    try w.interface.print("{s} = {s}\n", .{ item.key, val_str });
+            if (!updated_keys.contains(item.key)) {
+                if (item.isChangedFromDefault()) {
+                    var val_buf: [128]u8 = undefined;
+                    const val_str = item.valueString(&val_buf);
+                    if (item.setting_type == .choice) {
+                        try w.interface.print("{s} = \"{s}\"\n", .{ item.key, val_str });
+                    } else {
+                        try w.interface.print("{s} = {s}\n", .{ item.key, val_str });
+                    }
                 }
             }
+        }
+
+        // Theme addition if not present in file
+        if (!updated_keys.contains("theme") and self.themes.items.len > 0) {
+            const theme_name = self.themes.items[self.selected_theme_idx].name;
+            try w.interface.print("\ntheme = \"{s}\"\n", .{theme_name});
         }
 
         try w.interface.flush();
@@ -871,7 +1423,7 @@ const Studio = struct {
         });
         header_win.fill(.{ .style = title_style });
         _ = header_win.printSegment(.{
-            .text = " 👻 GHOSTTY CONFIG STUDIO — Interactive TUI in Zig",
+            .text = " 👻 GHOSTTY CONFIG STUDIO — Interactive Native TUI",
             .style = title_style,
         }, .{ .row_offset = 0, .col_offset = 0 });
 
@@ -901,7 +1453,7 @@ const Studio = struct {
         }
 
         const body_height = if (win.height > 4) win.height - 4 else 1;
-        const left_width = if (win.width > 70) @min(38, win.width / 2) else win.width;
+        const left_width = if (win.width > 70) @min(42, win.width / 2) else win.width;
 
         // Left Pane: Settings / Themes List
         const left_win = win.child(.{
@@ -953,13 +1505,13 @@ const Studio = struct {
         };
         help_bar.fill(.{ .style = help_style });
         _ = help_bar.printSegment(.{
-            .text = "[Tab/1..5] Category  [↑↓] Move  [←→/Space] Change  [s] Save Config  [?] Help  [q] Quit",
+            .text = "[Tab/1..5] Category  [↑↓] Move  [←→] Change  [d] Default  [s] Save Config  [q] Quit",
             .style = help_style,
         }, .{ .row_offset = 0, .col_offset = 2 });
     }
 
     fn drawThemesList(self: *Studio, win: vaxis.Window) !void {
-        const total = self.theme_names.items.len;
+        const total = self.themes.items.len;
         if (total == 0) {
             _ = win.printSegment(.{ .text = "  No themes discovered.", .style = .{} }, .{ .row_offset = 1, .col_offset = 1 });
             return;
@@ -975,7 +1527,7 @@ const Studio = struct {
             const idx = scroll_offset + row;
             if (idx >= total) break;
 
-            const name = self.theme_names.items[idx];
+            const name = self.themes.items[idx].name;
             const is_cursor = (idx == self.cursor_idx);
             const is_active = (idx == self.selected_theme_idx);
 
@@ -997,12 +1549,23 @@ const Studio = struct {
     }
 
     fn drawSettingsList(self: *Studio, win: vaxis.Window) !void {
+        const height = win.height;
+        var scroll_offset: usize = 0;
+        if (self.cursor_idx >= height) {
+            scroll_offset = self.cursor_idx - height + 1;
+        }
+
+        var cat_idx: usize = 0;
         var row: u16 = 0;
         for (self.settings.items) |*item| {
             if (item.category != self.category) continue;
-            if (row >= win.height) break;
+            defer cat_idx += 1;
 
-            const is_sel = (row == self.cursor_idx);
+            if (cat_idx < scroll_offset) continue;
+            if (row >= height) break;
+            defer row += 1;
+
+            const is_sel = (cat_idx == self.cursor_idx);
 
             const row_style: vaxis.Style = if (is_sel) .{
                 .fg = .{ .rgb = [_]u8{ 0x00, 0x00, 0x00 } },
@@ -1020,9 +1583,12 @@ const Studio = struct {
             var val_buf: [128]u8 = undefined;
             const val_str = item.valueString(&val_buf);
 
-            const val_style: vaxis.Style = if (is_sel) row_style else .{
+            const is_changed = item.isChangedFromDefault();
+            const val_style: vaxis.Style = if (is_sel) row_style else if (is_changed) .{
                 .fg = .{ .rgb = [_]u8{ 0xfa, 0xbd, 0x2f } },
                 .bold = true,
+            } else .{
+                .fg = .{ .rgb = [_]u8{ 0x92, 0x83, 0x74 } },
             };
 
             const val_col: u16 = if (win.width > val_str.len + 4)
@@ -1030,7 +1596,6 @@ const Studio = struct {
             else
                 win.width -| @as(u16, @intCast(val_str.len));
             _ = win.printSegment(.{ .text = val_str, .style = val_style }, .{ .row_offset = row, .col_offset = val_col });
-            row += 1;
         }
     }
 
@@ -1084,15 +1649,25 @@ const Studio = struct {
         // Terminal line with Cursor demo
         _ = win.printSegment(.{ .text = "│ ", .style = border_style }, .{ .row_offset = 5, .col_offset = 0 });
         _ = win.printSegment(.{
-            .text = "jaraujo@mac $ echo \"Ghostty TUI Studio\" ",
+            .text = "jaraujo@mac $ echo \"Ghostty Studio\" ",
             .style = .{ .fg = self.fg_color },
         }, .{ .row_offset = 5, .col_offset = 2 });
 
-        // Cursor representation
+        // Cursor representation based on setting
+        var cursor_char: []const u8 = "█";
+        if (self.findSetting("cursor-style")) |cs| {
+            var buf: [128]u8 = undefined;
+            const style_str = cs.valueString(&buf);
+            if (std.mem.eql(u8, style_str, "bar")) {
+                cursor_char = "│";
+            } else if (std.mem.eql(u8, style_str, "underline")) {
+                cursor_char = "_";
+            }
+        }
         _ = win.printSegment(.{
-            .text = "█",
+            .text = cursor_char,
             .style = .{ .fg = self.palette[11], .bold = true },
-        }, .{ .row_offset = 5, .col_offset = 42 });
+        }, .{ .row_offset = 5, .col_offset = 38 });
 
         // Divider
         _ = win.printSegment(.{ .text = "├─ Theme 16-Color ANSI Swatches ────────────────────┤", .style = border_style }, .{ .row_offset = 7, .col_offset = 0 });
@@ -1120,19 +1695,33 @@ const Studio = struct {
         _ = win.printSegment(.{ .text = "├─ Setting Documentation ───────────────────────────┤", .style = border_style }, .{ .row_offset = 11, .col_offset = 0 });
 
         if (self.category == .themes) {
+            const active_name = if (self.themes.items.len > 0 and self.selected_theme_idx < self.themes.items.len)
+                self.themes.items[self.selected_theme_idx].name
+            else
+                "Default";
+            var tbuf: [128]u8 = undefined;
+            const tmsg = std.fmt.bufPrint(&tbuf, "Active Theme: {s} (Total themes: {d})", .{ active_name, self.themes.items.len }) catch "Themes";
             _ = win.printSegment(.{
-                .text = "Theme: Selects the color scheme from bundled or user themes.",
-                .style = .{ .fg = .{ .rgb = [_]u8{ 0xeb, 0xdb, 0xb2 } } },
+                .text = tmsg,
+                .style = .{ .fg = .{ .rgb = [_]u8{ 0xfa, 0xbd, 0x2f } }, .bold = true },
             }, .{ .row_offset = 12, .col_offset = 2 });
             _ = win.printSegment(.{
-                .text = "Press [Enter] to preview immediately, [s] to save permanently.",
+                .text = "[↑↓] Browse themes (live preview)  [Enter] Apply  [s] Save permanently",
                 .style = .{ .fg = .{ .rgb = [_]u8{ 0x83, 0xa5, 0x98 } } },
             }, .{ .row_offset = 13, .col_offset = 2 });
         } else {
             if (self.getActiveSettingConst(self.cursor_idx)) |item| {
+                var val_buf: [128]u8 = undefined;
+                const val_str = item.valueString(&val_buf);
+                const is_changed = item.isChangedFromDefault();
+
+                var lbuf: [128]u8 = undefined;
+                const status_tag = if (is_changed) " (Modified - will be written)" else " (Default - not written)";
+                const title_line = std.fmt.bufPrint(&lbuf, "{s}: {s}{s}", .{ item.label, val_str, status_tag }) catch item.label;
+
                 _ = win.printSegment(.{
-                    .text = item.label,
-                    .style = .{ .fg = .{ .rgb = [_]u8{ 0xfa, 0xbd, 0x2f } }, .bold = true },
+                    .text = title_line,
+                    .style = .{ .fg = if (is_changed) .{ .rgb = [_]u8{ 0xfa, 0xbd, 0x2f } } else .{ .rgb = [_]u8{ 0x83, 0xa5, 0x98 } }, .bold = true },
                 }, .{ .row_offset = 12, .col_offset = 2 });
                 _ = win.printSegment(.{
                     .text = item.doc,
@@ -1159,16 +1748,17 @@ pub fn run(alloc: Allocator) !u8 {
     }
 
     var stdout_file: std.Io.File = .stdout();
-    if (!tui.can_pretty_print or !(try stdout_file.isTty(global.io()))) {
+    if (!(stdout_file.isTty(global.io()) catch false)) {
         var buffer: [1024]u8 = undefined;
-        var stderr_writer = std.Io.File.stderr().writer(global.io(), &buffer);
-        try stderr_writer.interface.print("ghostty +config requires an interactive TTY terminal.\n", .{});
-        try stderr_writer.interface.flush();
+        var stdout_writer = stdout_file.writer(global.io(), &buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("ghostty +config requires an interactive terminal TTY.\n", .{});
+        try stdout.flush();
         return 1;
     }
 
-    var buf: [4096]u8 = undefined;
-    var studio = try Studio.init(alloc, &buf);
+    var tty_buf: [4096]u8 = undefined;
+    const studio = try Studio.init(alloc, &tty_buf);
     defer studio.deinit();
 
     try studio.start();
