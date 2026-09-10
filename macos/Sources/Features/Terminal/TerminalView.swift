@@ -56,6 +56,7 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
     /// The most recently focused surface, equal to `focusedSurface` when it is non-nil.
     @State private var lastFocusedSurface: Weak<Ghostty.SurfaceView>?
     @StateObject private var topBarProcessMonitor = TerminalProcessMonitor()
+    @ObservedObject private var quickCommandsState = QuickCommandsState.shared
 
     // This seems like a crutch after switching from SwiftUI to AppKit lifecycle.
     @FocusState private var focused: Bool
@@ -337,16 +338,16 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                                     delegate?.toggleQuickCommands(nil)
                                 } label: {
                                     Image(systemName: "sidebar.right")
-                                        .font(.system(size: 12, weight: viewModel.quickCommandsIsShowing ? .semibold : .regular))
-                                        .foregroundStyle(viewModel.quickCommandsIsShowing ? Color.accentColor : Color.secondary)
+                                        .font(.system(size: 12, weight: quickCommandsState.isShowing ? .semibold : .regular))
+                                        .foregroundStyle(quickCommandsState.isShowing ? Color.accentColor : Color.secondary)
                                         .frame(width: 24, height: 22)
-                                        .background(viewModel.quickCommandsIsShowing ? Color.accentColor.opacity(0.15) : Color(nsColor: .controlBackgroundColor))
+                                        .background(quickCommandsState.isShowing ? Color.accentColor.opacity(0.15) : Color(nsColor: .controlBackgroundColor))
                                         .cornerRadius(5)
                                 }
                                 .buttonStyle(.plain)
-                                .help(viewModel.quickCommandsIsShowing ? "Hide Quick Commands (Cmd+Shift+B)" : "Show Quick Commands (Cmd+Shift+B)")
+                                .help(quickCommandsState.isShowing ? "Hide Quick Commands (Cmd+Shift+B)" : "Show Quick Commands (Cmd+Shift+B)")
                                 .accessibilityLabel("Toggle Quick Commands")
-                                .accessibilityValue(viewModel.quickCommandsIsShowing ? "Shown" : "Hidden")
+                                .accessibilityValue(quickCommandsState.isShowing ? "Shown" : "Hidden")
                             }
                         }
                         .padding(.horizontal, 10)
@@ -354,8 +355,8 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                     }
 
                     QuickCommandsLayout(
-                        isShowing: $viewModel.quickCommandsIsShowing,
-                        width: $viewModel.quickCommandsWidth
+                        isShowing: $quickCommandsState.isShowing,
+                        width: $quickCommandsState.width
                     ) {
                         TerminalSplitTreeView(
                             tree: viewModel.surfaceTree,
@@ -384,9 +385,7 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                     } sidebar: {
                         QuickCommandsView(
                             configuredCommands: ghostty.config.quickCommands,
-                            surface: lastFocusedSurface?.value.flatMap {
-                                viewModel.surfaceTree.contains($0) ? $0 : nil
-                            },
+                            surface: activeSurface,
                             send: { command, customText, execute, broadcast in
                                 delegate?.sendQuickCommand(command, customText: customText, execute: execute, broadcast: broadcast)
                             },

@@ -55,8 +55,14 @@ class BaseTerminalController: NSWindowController,
 
     /// This can be set to show/hide the command palette.
     @Published var commandPaletteIsShowing: Bool = false
-    @Published var quickCommandsIsShowing: Bool = false
-    @Published var quickCommandsWidth: CGFloat = 300
+    var quickCommandsIsShowing: Bool {
+        get { QuickCommandsState.shared.isShowing }
+        set { QuickCommandsState.shared.isShowing = newValue }
+    }
+    var quickCommandsWidth: CGFloat {
+        get { QuickCommandsState.shared.width }
+        set { QuickCommandsState.shared.width = newValue }
+    }
 
     /// Set if the terminal view should show the update overlay.
     @Published var updateOverlayIsVisible: Bool = false
@@ -656,8 +662,8 @@ class BaseTerminalController: NSWindowController,
     }
 
     @IBAction func toggleQuickCommands(_ sender: Any?) {
-        quickCommandsIsShowing.toggle()
-        if !quickCommandsIsShowing, let focusedSurface, surfaceTree.contains(focusedSurface) {
+        QuickCommandsState.shared.toggle()
+        if !QuickCommandsState.shared.isShowing, let focusedSurface, surfaceTree.contains(focusedSurface) {
             Ghostty.moveFocus(to: focusedSurface)
         }
     }

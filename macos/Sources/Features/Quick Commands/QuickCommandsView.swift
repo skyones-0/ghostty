@@ -70,13 +70,10 @@ struct QuickCommandsView: View {
     @StateObject private var processMonitor = TerminalProcessMonitor()
     @StateObject private var keyMonitor = QuickCommandsKeyMonitor()
 
+    @ObservedObject private var state = QuickCommandsState.shared
     @State private var editing: QuickCommand?
     @State private var parameterizing: QuickCommand?
     @State private var isCreatingGroup: Bool = false
-    @State private var searchText: String = ""
-    @State private var selectedGroup: String?
-    @State private var isBroadcast: Bool = false
-    @State private var selectedIndex: Int = 0
 
     @FocusState private var isSearchFocused: Bool
 
@@ -99,10 +96,10 @@ struct QuickCommandsView: View {
     }
 
     private func matchesFilter(_ cmd: QuickCommand) -> Bool {
-        if let selectedGroup, !selectedGroup.isEmpty {
+        if let selectedGroup = state.selectedGroup, !selectedGroup.isEmpty {
             if cmd.group != selectedGroup { return false }
         }
-        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let query = state.searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if query.isEmpty { return true }
         if cmd.title.lowercased().contains(query) { return true }
         if cmd.command.lowercased().contains(query) { return true }
@@ -142,19 +139,19 @@ struct QuickCommandsView: View {
 
                 // Broadcast toggle (SecureCRT Send to All)
                 Button {
-                    isBroadcast.toggle()
+                    state.isBroadcast.toggle()
                 } label: {
-                    Image(systemName: isBroadcast ? "rectangle.split.2x2.fill" : "rectangle.split.2x2")
-                        .foregroundStyle(isBroadcast ? Color.accentColor : Color.secondary)
+                    Image(systemName: state.isBroadcast ? "rectangle.split.2x2.fill" : "rectangle.split.2x2")
+                        .foregroundStyle(state.isBroadcast ? Color.accentColor : Color.secondary)
                 }
                 .buttonStyle(.plain)
-                .help(isBroadcast ? "Broadcast active (send to all splits)" : "Broadcast: Send to all splits")
+                .help(state.isBroadcast ? "Broadcast active (send to all splits)" : "Broadcast: Send to all splits")
                 .accessibilityLabel("Broadcast to all splits")
-                .accessibilityValue(isBroadcast ? "On" : "Off")
+                .accessibilityValue(state.isBroadcast ? "On" : "Off")
 
                 // Add command
                 Button {
-                    editing = QuickCommand(title: "", command: "", group: selectedGroup)
+                    editing = QuickCommand(title: "", command: "", group: state.selectedGroup)
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -168,19 +165,19 @@ struct QuickCommandsView: View {
                 HStack(spacing: 5) {
                     GroupTabButton(
                         title: "All",
-                        isSelected: selectedGroup == nil,
+                        isSelected: state.selectedGroup == nil,
                         count: configuredCommands.count + library.commands.count
                     ) {
-                        withAnimation(.easeInOut(duration: 0.15)) { selectedGroup = nil }
+                        withAnimation(.easeInOut(duration: 0.15)) { state.selectedGroup = nil }
                     }
 
                     ForEach(allGroups, id: \.self) { grp in
                         GroupTabButton(
                             title: grp,
-                            isSelected: selectedGroup == grp,
+                            isSelected: state.selectedGroup == grp,
                             count: countForGroup(grp)
                         ) {
-                            withAnimation(.easeInOut(duration: 0.15)) { selectedGroup = grp }
+                            withAnimation(.easeInOut(duration: 0.15)) { state.selectedGroup = grp }
                         }
                     }
 
@@ -210,7 +207,7 @@ struct QuickCommandsView: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
                     .font(.caption)
-                TextField("Search...", text: $searchText)
+                TextField("Search...", text: $state.searchText)
                     .textFieldStyle(.plain)
                     .font(.caption)
                     .focused($isSearchFocused)
@@ -227,9 +224,9 @@ struct QuickCommandsView: View {
                             surface.window?.makeFirstResponder(surface)
                         }
                     }
-                if !searchText.isEmpty {
+                if !state.searchText.isEmpty {
                     Button {
-                        searchText = ""
+                        state.searchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
@@ -243,7 +240,7 @@ struct QuickCommandsView: View {
             .background(Color(nsColor: .controlBackgroundColor))
             .cornerRadius(6)
 
-            if isBroadcast {
+            if state.isBroadcast {
                 HStack(spacing: 4) {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .foregroundStyle(.orange)
@@ -278,7 +275,7 @@ struct QuickCommandsView: View {
                                     configured: item.configured,
                                     surface: surface,
                                     shortcutNumber: index < 9 ? index + 1 : nil,
-                                    isHighlighted: selectedIndex == index,
+                                    isHighlighted: state.selectedIndex == index,
                                     onExecute: {
                                         handleExecute(item.command)
                                     },
@@ -296,7 +293,7 @@ struct QuickCommandsView: View {
                             }
                         }
                     }
-                    .onChange(of: selectedIndex) { newIndex in
+                    .onChange(of: state.selectedIndex) { newIndex in
                         withAnimation(.easeInOut(duration: 0.1)) {
                             scrollProxy.scrollTo(newIndex, anchor: .center)
                         }
@@ -324,11 +321,11 @@ struct QuickCommandsView: View {
         .onDisappear {
             keyMonitor.stop()
         }
-        .onChange(of: searchText) { _ in
-            selectedIndex = 0
+        .onChange(of: state.searchText) { _ in
+            state.selectedIndex = 0
         }
-        .onChange(of: selectedGroup) { _ in
-            selectedIndex = 0
+        .onChange(of: state.selectedGroup) { _ in
+            state.selectedIndex = 0
         }
         .onChange(of: surface) { newSurface in
             processMonitor.setSurfaceView(newSurface)
@@ -341,7 +338,7 @@ struct QuickCommandsView: View {
         }
         .sheet(isPresented: $isCreatingGroup) {
             QuickGroupCreationModal(library: library) { newGroup in
-                selectedGroup = newGroup
+                state.selectedGroup = newGroup
             }
         }
         .sheet(item: $parameterizing) { command in
@@ -350,7 +347,7 @@ struct QuickCommandsView: View {
                 clipboard: NSPasteboard.general.string(forType: .string),
                 selection: surface?.accessibilitySelectedText()
             ) { customText, execute in
-                send(command, customText, execute, isBroadcast)
+                send(command, customText, execute, state.isBroadcast)
                 isSearchFocused = false
                 if let surface {
                     surface.window?.makeFirstResponder(surface)
@@ -362,17 +359,17 @@ struct QuickCommandsView: View {
     private func navigateSelection(_ delta: Int) {
         let count = filteredCommands.count
         guard count > 0 else { return }
-        selectedIndex = (selectedIndex + delta + count) % count
+        state.selectedIndex = (state.selectedIndex + delta + count) % count
     }
 
     private func executeFocusedCommand() {
-        guard selectedIndex >= 0 && selectedIndex < filteredCommands.count else { return }
-        handleExecute(filteredCommands[selectedIndex].command)
+        guard state.selectedIndex >= 0 && state.selectedIndex < filteredCommands.count else { return }
+        handleExecute(filteredCommands[state.selectedIndex].command)
     }
 
     private func insertFocusedCommand() {
-        guard selectedIndex >= 0 && selectedIndex < filteredCommands.count else { return }
-        handleInsert(filteredCommands[selectedIndex].command)
+        guard state.selectedIndex >= 0 && state.selectedIndex < filteredCommands.count else { return }
+        handleInsert(filteredCommands[state.selectedIndex].command)
     }
 
     private func triggerNumberShortcut(_ num: Int) {
@@ -386,7 +383,7 @@ struct QuickCommandsView: View {
         let selection = surface?.accessibilitySelectedText()
         if command.manualPlaceholders.isEmpty {
             let resolved = command.autoResolvedCommand(clipboard: clipboard, selection: selection)
-            send(command, resolved, true, isBroadcast)
+            send(command, resolved, true, state.isBroadcast)
             isSearchFocused = false
             if let surface {
                 surface.window?.makeFirstResponder(surface)
@@ -401,7 +398,7 @@ struct QuickCommandsView: View {
         let selection = surface?.accessibilitySelectedText()
         if command.manualPlaceholders.isEmpty {
             let resolved = command.autoResolvedCommand(clipboard: clipboard, selection: selection)
-            send(command, resolved, false, isBroadcast)
+            send(command, resolved, false, state.isBroadcast)
             isSearchFocused = false
             if let surface {
                 surface.window?.makeFirstResponder(surface)
