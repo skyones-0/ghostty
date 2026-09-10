@@ -183,6 +183,19 @@ extension Ghostty {
                         ))
                     }
 
+                    if let cmdAlert = processMonitor.activeCommandAlert, isFocusedSurface {
+                        CommandFinishedToast(
+                            alert: cmdAlert,
+                            onDismiss: {
+                                processMonitor.dismissCommandAlert()
+                            }
+                        )
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
+                    }
+
                     if let msg = copiedHudMessage, isFocusedSurface {
                         CopiedHudToast(message: msg)
                             .transition(.asymmetric(
@@ -193,6 +206,7 @@ extension Ghostty {
                 }
                 .animation(.spring(response: 0.35, dampingFraction: 0.8), value: serialWatcher.activeAlert)
                 .animation(.spring(response: 0.35, dampingFraction: 0.8), value: processMonitor.activePortAlert)
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: processMonitor.activeCommandAlert)
                 .animation(.spring(response: 0.35, dampingFraction: 0.8), value: copiedHudMessage)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .padding(.top, 12)

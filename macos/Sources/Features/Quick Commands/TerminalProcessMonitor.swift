@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import Darwin
+import AppKit
 
 enum TerminalJobState: String, Sendable, Equatable {
     case running
@@ -33,6 +34,7 @@ final class TerminalProcessMonitor: ObservableObject {
     @Published private(set) var recentExits: [String] = []
     @Published private(set) var currentWorkingDir: String?
     @Published private(set) var activePortAlert: LocalPortInfo?
+    @Published private(set) var activeCommandAlert: CommandAlertInfo?
 
     var foregroundJob: TerminalJob? {
         runningJobs.first(where: { $0.isForeground })
@@ -96,6 +98,10 @@ final class TerminalProcessMonitor: ObservableObject {
     let portDetector = LocalPortDetector()
     var isFocused: Bool = true
     private var previousForegroundPid: Int32?
+    private var foregroundStartTime: Date?
+    private var foregroundCommandName: String?
+    private var foregroundCommandLine: String?
+    private var commandAlertDismissTask: Task<Void, Never>?
 
     private var timer: Timer?
     private weak var surfaceView: Ghostty.SurfaceView?
@@ -147,6 +153,29 @@ final class TerminalProcessMonitor: ObservableObject {
     func dismissPortAlert() {
         portDetector.dismissAlert()
         activePortAlert = nil
+    }
+
+    func dismissCommandAlert() {
+        commandAlertDismissTask?.cancel()
+        commandAlertDismissTask = nil
+        activeCommandAlert = nil
+    }
+
+    func triggerCommandAlert(name: String, commandLine: String?, duration: TimeInterval) {
+        let alert = CommandAlertInfo(
+            name: name,
+            commandLine: commandLine,
+            duration: duration,
+            finishedAt: Date()
+        )
+        self.activeCommandAlert = alert
+        commandAlertDismissTask?.cancel()
+        commandAlertDismissTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            if self.activeCommandAlert?.id == alert.id {
+                self.activeCommandAlert = nil
+            }
+        }
     }
 
     func refresh() {
@@ -298,17 +327,32 @@ final class TerminalProcessMonitor: ObservableObject {
 
         if let fg = activeFgJob {
             if fg.pid != previousForegroundPid {
+                previousForegroundPid = fg.pid
+                foregroundStartTime = Date()
+                foregroundCommandName = fg.name
+                foregroundCommandLine = fg.commandLine
                 if let surfaceId = surfaceView?.id {
                     LongCommandNotifier.shared.commandDidStart(name: fg.name, commandLine: fg.commandLine, surfaceUUID: surfaceId)
                 }
-                previousForegroundPid = fg.pid
             }
         } else {
-            if previousForegroundPid != nil {
+            if let _ = previousForegroundPid, let startTime = foregroundStartTime {
+                let duration = Date().timeIntervalSince(startTime)
+                if duration >= 5.0 {
+                    triggerCommandAlert(
+                        name: foregroundCommandName ?? "Command",
+                        commandLine: foregroundCommandLine,
+                        duration: duration
+                    )
+                    NSSound(named: "Glass")?.play()
+                }
                 if let surfaceId = surfaceView?.id {
                     LongCommandNotifier.shared.commandDidFinish(surfaceUUID: surfaceId, isFocused: isFocused)
                 }
                 previousForegroundPid = nil
+                foregroundStartTime = nil
+                foregroundCommandName = nil
+                foregroundCommandLine = nil
             }
         }
 
