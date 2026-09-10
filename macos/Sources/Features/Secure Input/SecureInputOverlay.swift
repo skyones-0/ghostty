@@ -13,24 +13,27 @@ struct SecureInputOverlay: View {
             HStack {
                 Spacer()
 
-                Image(systemName: "lock")
-                    .font(.system(size: 16, weight: .semibold))
+                Image(systemName: "lock.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
                     .foregroundColor(.black)
                     .frame(width: 35, height: 35)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(
+                    .background(
+                        Rectangle()
+                            .fill(
                                 AngularGradient(
                                     gradient: Gradient(
                                         colors: [.cyan, .blue, .yellow, .blue, .cyan]
                                     ),
                                     center: .center,
                                     angle: gradientAngle
-                                ),
-                                lineWidth: 1.5
+                                )
                             )
+                            .blur(radius: 4, opaque: true)
                             .opacity(gradientOpacity)
                     )
+                    .mask(RoundedRectangle(cornerRadius: 12))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Color.gray.opacity(0.4), lineWidth: 1)
