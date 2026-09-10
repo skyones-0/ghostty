@@ -22,6 +22,9 @@ extension Ghostty {
         // Observe SecureInput to detect when its enabled
         @ObservedObject private var secureInput = SecureInput.shared
 
+        // Monitor background processes on this surface
+        @StateObject private var processMonitor = TerminalProcessMonitor()
+
         @EnvironmentObject private var ghostty: Ghostty.App
         @Environment(\.ghosttyLastFocusedSurface) private var lastFocusedSurface
 
@@ -111,14 +114,27 @@ extension Ghostty {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
 
-                // If we have secure input enabled and we're the focused surface and window
-                // then we want to show the secure input overlay.
-                if ghostty.config.secureInputIndication &&
-                    secureInput.enabled &&
-                    isFocusedSurface &&
-                    windowFocus {
-                    SecureInputOverlay()
+                // Top-Right Overlays: Secure Input & Background Processes
+                VStack(spacing: 8) {
+                    if ghostty.config.secureInputIndication &&
+                        secureInput.enabled &&
+                        isFocusedSurface &&
+                        windowFocus {
+                        SecureInputOverlay()
+                    }
+
+                    if isFocusedSurface && windowFocus && !processMonitor.backgroundJobs.isEmpty {
+                        BackgroundProcessOverlay(
+                            jobs: processMonitor.backgroundJobs,
+                            onKill: { job in
+                                processMonitor.terminateJob(job)
+                            }
+                        )
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.top, 10)
+                .padding(.trailing, 10)
 
                 // Search overlay
                 if let searchState = surfaceView.searchState {
@@ -167,6 +183,12 @@ extension Ghostty {
                     surfaceView: surfaceView,
                     dragHandle: ghostty.config.dragHandle,
                 )
+            }
+            .onAppear {
+                processMonitor.setSurfaceView(surfaceView)
+            }
+            .onChange(of: surfaceView) { newView in
+                processMonitor.setSurfaceView(newView)
             }
         }
     }

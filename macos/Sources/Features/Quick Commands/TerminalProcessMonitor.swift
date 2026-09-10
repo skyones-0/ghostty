@@ -182,6 +182,12 @@ final class TerminalProcessMonitor: ObservableObject {
 
     func terminateJob(_ job: TerminalJob) {
         kill(job.pid, SIGTERM)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            if kill(job.pid, 0) == 0 {
+                kill(job.pid, SIGKILL)
+            }
+            self?.refresh()
+        }
         refresh()
     }
 
