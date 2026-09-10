@@ -115,7 +115,7 @@ extension Ghostty {
                 // then we want to show the secure input overlay.
                 if ghostty.config.secureInputIndication &&
                     secureInput.enabled &&
-                    surfaceFocus &&
+                    isFocused &&
                     windowFocus {
                     SecureInputOverlay()
                 }
