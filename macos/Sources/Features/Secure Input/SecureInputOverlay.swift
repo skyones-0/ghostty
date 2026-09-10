@@ -13,42 +13,31 @@ struct SecureInputOverlay: View {
             HStack {
                 Spacer()
 
-                Image(systemName: "lock.shield.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 25, height: 25)
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.primary)
-                    .padding(5)
+                    .frame(width: 24, height: 24)
                     .background(
-                        Rectangle()
-                            .fill(.background)
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(nsColor: .windowBackgroundColor).opacity(0.85))
                             .overlay(
-                                Rectangle()
-                                    .fill(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(
                                         AngularGradient(
                                             gradient: Gradient(
                                                 colors: [.cyan, .blue, .yellow, .blue, .cyan]
                                             ),
                                             center: .center,
                                             angle: gradientAngle
-                                        )
-                                    )
-                                    .blur(radius: 4, opaque: true)
-                                    .mask(
-                                        RadialGradient(
-                                            colors: [.clear, .black],
-                                            center: .center,
-                                            startRadius: 0,
-                                            endRadius: 25
-                                        )
+                                        ),
+                                        lineWidth: 1.5
                                     )
                                     .opacity(gradientOpacity)
-                             )
-                    )
-                    .mask(RoundedRectangle(cornerRadius: 12))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.gray, lineWidth: 1)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
+                            )
                     )
                     .onTapGesture {
                         isPopover = true
