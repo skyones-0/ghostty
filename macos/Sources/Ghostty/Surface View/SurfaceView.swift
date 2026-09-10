@@ -35,7 +35,15 @@ extension Ghostty {
         @Environment(\.ghosttyLastFocusedSurface) private var lastFocusedSurface
 
         private var isFocusedSurface: Bool {
-            surfaceFocus || lastFocusedSurface?.value === surfaceView
+            if surfaceView.focused { return true }
+            if surfaceFocus { return true }
+            if let last = lastFocusedSurface?.value {
+                return last === surfaceView
+            }
+            if let win = surfaceView.window {
+                return win.isKeyWindow
+            }
+            return true
         }
 
         var body: some View {

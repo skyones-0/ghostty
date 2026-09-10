@@ -38,17 +38,26 @@ final class LocalPortDetector: ObservableObject {
 
         for pid in pids {
             let procPorts = getListeningPorts(for: pid)
-            let name = names[pid] ?? "process"
+            guard !procPorts.isEmpty else { continue }
+
+            var name = names[pid]
+            if name == nil || name?.isEmpty == true {
+                var nameBuffer = [CChar](repeating: 0, count: 256)
+                proc_name(pid, &nameBuffer, 256)
+                let resolved = String(cString: nameBuffer)
+                name = resolved.isEmpty ? "process" : resolved
+            }
+            let displayName = name ?? "process"
 
             for port in procPorts {
                 // Filter out standard non-dev internal ports or privileged ports below 80
                 guard port >= 80 && port <= 65535 else { continue }
                 // Avoid notifying common system ports
-                if port == 5000 && name.lowercased().contains("controlcenter") { continue }
+                if port == 5000 && displayName.lowercased().contains("controlcenter") { continue }
 
                 let info = LocalPortInfo(
                     port: port,
-                    processName: name,
+                    processName: displayName,
                     pid: pid,
                     detectedAt: Date()
                 )
@@ -80,10 +89,12 @@ final class LocalPortDetector: ObservableObject {
         let count = Int(bufSize) / MemoryLayout<proc_fdinfo>.stride
         var fds = [proc_fdinfo](repeating: proc_fdinfo(), count: count)
         let actualSize = proc_pidinfo(pid, Self.PROC_PIDLISTFDS, 0, &fds, bufSize)
-        guard actualSize == bufSize else { return [] }
+        guard actualSize > 0 else { return [] }
 
+        let actualCount = Int(actualSize) / MemoryLayout<proc_fdinfo>.stride
         var result: [Int] = []
-        for fd in fds {
+        for i in 0..<actualCount {
+            let fd = fds[i]
             guard fd.proc_fdtype == Self.PROX_FDTYPE_SOCKET else { continue }
 
             var sockInfo = socket_fdinfo()
@@ -96,7 +107,7 @@ final class LocalPortDetector: ObservableObject {
                 let tcp = sock.soi_proto.pri_tcp
                 if tcp.tcpsi_state == Self.TSI_S_LISTEN {
                     let rawPort = tcp.tcpsi_ini.insi_lport
-                    let port = Int(CFSwapInt16BigToHost(UInt16(bitPattern: Int16(rawPort))))
+                    let port = Int(UInt16(bigEndian: UInt16(truncatingIfNeeded: rawPort)))
                     if port > 0 && !result.contains(port) {
                         result.append(port)
                     }

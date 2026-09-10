@@ -15,12 +15,21 @@ final class LongCommandNotifier {
     }
 
     private var activeCommands: [UUID: ActiveCommand] = [:]
-    private let thresholdSeconds: TimeInterval = 15.0
+    private let thresholdSeconds: TimeInterval = 10.0
 
-    private init() {}
+    private init() {
+        requestAuthorization()
+    }
+
+    func requestAuthorization() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
 
     /// Record the start of a foreground command.
     func commandDidStart(name: String, commandLine: String?, surfaceUUID: UUID) {
+        // Ensure notification permissions are requested
+        requestAuthorization()
+
         // Only record if not already tracking for this surface
         if activeCommands[surfaceUUID] == nil {
             activeCommands[surfaceUUID] = ActiveCommand(
@@ -64,7 +73,10 @@ final class LongCommandNotifier {
         }
 
         content.sound = .default
-        content.userInfo = ["surface": command.surfaceUUID.uuidString]
+        content.userInfo = [
+            "surface": command.surfaceUUID.uuidString,
+            "requireFocus": false
+        ]
 
         let request = UNNotificationRequest(
             identifier: "command_finish_\(UUID().uuidString)",

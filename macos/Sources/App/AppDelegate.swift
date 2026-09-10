@@ -691,9 +691,9 @@ class AppDelegate: NSObject,
     }
 
     private func requestBadgeAuthorizationAndSet(_ center: UNUserNotificationCenter) {
-        center.requestAuthorization(options: [.badge]) { granted, error in
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error = error {
-                Self.logger.warning("Error requesting badge authorization: \(error, privacy: .public)")
+                Self.logger.warning("Error requesting notification authorization: \(error, privacy: .public)")
                 return
             }
 

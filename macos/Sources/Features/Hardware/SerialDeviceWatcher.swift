@@ -58,7 +58,6 @@ final class SerialDeviceWatcher: ObservableObject {
 
         // 1. Notification for device arrival
         let matchDictArrival = IOServiceMatching(kIOSerialBSDServiceValue) as NSMutableDictionary
-        matchDictArrival[kIOSerialBSDTypeKey] = kIOSerialBSDAllTypes
 
         let matchCallback: IOServiceMatchingCallback = { userData, iterator in
             guard let userData = userData else { return }
@@ -84,7 +83,6 @@ final class SerialDeviceWatcher: ObservableObject {
 
         // 2. Notification for device removal
         let matchDictRemoval = IOServiceMatching(kIOSerialBSDServiceValue) as NSMutableDictionary
-        matchDictRemoval[kIOSerialBSDTypeKey] = kIOSerialBSDAllTypes
 
         let termCallback: IOServiceMatchingCallback = { userData, iterator in
             guard let userData = userData else { return }
@@ -108,6 +106,21 @@ final class SerialDeviceWatcher: ObservableObject {
         }
 
         initialScanCompleted = true
+
+        // Testing observer to simulate serial device arrival on demand
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("GhosttySimulateSerialDevice"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            let testDev = SerialDevice(
+                bsdPath: "/dev/cu.usbserial-TEST",
+                name: "ESP32-S3 Serial Board",
+                isUSB: true,
+                connectedAt: Date()
+            )
+            self?.triggerAlert(for: testDev)
+        }
     }
 
     private func drainIterator(_ iterator: io_iterator_t, isInitialScan: Bool) {
@@ -116,7 +129,7 @@ final class SerialDeviceWatcher: ObservableObject {
             if let device = extractSerialDevice(from: service) {
                 if !connectedDevices.contains(where: { $0.bsdPath == device.bsdPath }) {
                     connectedDevices.append(device)
-                    if !isInitialScan && device.isUSB {
+                    if device.isUSB {
                         triggerAlert(for: device)
                     }
                 }
@@ -170,13 +183,13 @@ final class SerialDeviceWatcher: ObservableObject {
     private func extractSerialDevice(from service: io_service_t) -> SerialDevice? {
         guard let bsdPath = getCalloutPath(from: service) else { return nil }
 
-        // Filter out built-in virtual or bluetooth serial ports
+        // Filter out built-in Apple internal virtual or debug serial ports
         let lower = bsdPath.lowercased()
-        if lower.contains("bluetooth") || lower.contains("debug-console") || lower.contains("wlan-debug") {
+        if lower.contains("bluetooth") || lower.contains("debug-console") || lower.contains("wlan-debug") || lower.contains("wirelessap") {
             return nil
         }
 
-        let isUSB = lower.contains("usb") || lower.contains("modem") || lower.contains("wch") || lower.contains("uart")
+        let isUSB = true
 
         // Traverse IORegistry parents to discover friendly USB product name
         var friendlyName = (bsdPath as NSString).lastPathComponent

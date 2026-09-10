@@ -253,12 +253,50 @@ final class TerminalProcessMonitor: ObservableObject {
         runningJobs = currentJobs
 
         // Inspect local listening ports on processes attached to this session
-        let allSessionPids = procs.map { $0.kp_proc.p_pid }.filter { $0 > 0 }
+        var allSessionPids = procs.map { $0.kp_proc.p_pid }.filter { $0 > 0 }
+        if foregroundPID > 0 && !allSessionPids.contains(foregroundPID) {
+            allSessionPids.append(foregroundPID)
+        }
+
+        // Include any child processes (e.g. dev servers spawned by CLI runners)
+        var childPids: [pid_t] = []
+        for pid in allSessionPids {
+            let numChildren = proc_listchildpids(pid, nil, 0)
+            if numChildren > 0 {
+                var pids = [pid_t](repeating: 0, count: Int(numChildren))
+                let count = proc_listchildpids(pid, &pids, Int32(MemoryLayout<pid_t>.stride * Int(numChildren)))
+                if count > 0 {
+                    childPids.append(contentsOf: pids.prefix(Int(count)))
+                }
+            }
+        }
+        for child in childPids where !allSessionPids.contains(child) {
+            allSessionPids.append(child)
+        }
+
         portDetector.inspect(pids: allSessionPids, names: knownNames)
         self.activePortAlert = portDetector.activeAlert
 
         // Track foreground command execution for long-running notifications
-        if let fg = currentJobs.first(where: { $0.isForeground }) {
+        var activeFgJob = currentJobs.first(where: { $0.isForeground })
+        if activeFgJob == nil && foregroundPID > 0 {
+            var nameBuffer = [CChar](repeating: 0, count: 256)
+            proc_name(foregroundPID, &nameBuffer, 256)
+            let rawName = String(cString: nameBuffer)
+            if !rawName.isEmpty && !ignoredNames.contains(rawName.lowercased()) {
+                activeFgJob = TerminalJob(
+                    pid: foregroundPID,
+                    name: rawName,
+                    commandLine: getCommandLine(pid: foregroundPID),
+                    pgid: foregroundPID,
+                    isForeground: true,
+                    state: .running,
+                    isActive: true
+                )
+            }
+        }
+
+        if let fg = activeFgJob {
             if fg.pid != previousForegroundPid {
                 if let surfaceId = surfaceView?.id {
                     LongCommandNotifier.shared.commandDidStart(name: fg.name, commandLine: fg.commandLine, surfaceUUID: surfaceId)
