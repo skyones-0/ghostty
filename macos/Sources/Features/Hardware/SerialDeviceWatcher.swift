@@ -156,8 +156,9 @@ final class SerialDeviceWatcher: ObservableObject {
     private func triggerAlert(for device: SerialDevice) {
         activeAlert = device
         autoDismissTask?.cancel()
-        autoDismissTask = Task { @MainActor in
+        autoDismissTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard let self = self else { return }
             if self.activeAlert == device {
                 self.dismissAlert()
             }

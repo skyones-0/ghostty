@@ -60,13 +60,16 @@ final class TerminalProcessMonitor: ObservableObject {
     private func getCommandLine(pid: pid_t) -> String? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size: Int = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
-        var buffer = [CChar](repeating: 0, count: size)
-        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return nil }
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size, size < 256 * 1024 else { return nil }
+        // Allocate size + 1 to guarantee null termination
+        var buffer = [CChar](repeating: 0, count: size + 1)
+        var actualSize = size
+        guard sysctl(&mib, 3, &buffer, &actualSize, nil, 0) == 0 else { return nil }
+        buffer[size] = 0
 
         var argc: Int32 = 0
         memcpy(&argc, buffer, MemoryLayout<Int32>.size)
-        guard argc > 0 else { return nil }
+        guard argc > 0 && argc < 4096 else { return nil }
 
         var idx = MemoryLayout<Int32>.size
         while idx < size && buffer[idx] != 0 { idx += 1 }
@@ -170,8 +173,9 @@ final class TerminalProcessMonitor: ObservableObject {
         )
         self.activeCommandAlert = alert
         commandAlertDismissTask?.cancel()
-        commandAlertDismissTask = Task { @MainActor in
+        commandAlertDismissTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard let self = self else { return }
             if self.activeCommandAlert?.id == alert.id {
                 self.activeCommandAlert = nil
             }
@@ -380,8 +384,9 @@ final class TerminalProcessMonitor: ObservableObject {
 
     private func showExit(_ name: String) {
         recentExits.append(name)
-        Task { @MainActor in
+        Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard let self = self else { return }
             if let idx = self.recentExits.firstIndex(of: name) {
                 self.recentExits.remove(at: idx)
             }
