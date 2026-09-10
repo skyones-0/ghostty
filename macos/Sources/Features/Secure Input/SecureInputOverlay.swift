@@ -13,33 +13,27 @@ struct SecureInputOverlay: View {
             HStack {
                 Spacer()
 
-                Image(systemName: "lock.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 18, height: 18)
+                Image(systemName: "lock")
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.black)
                     .frame(width: 35, height: 35)
-                    .background(
+                    .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.clear)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(
-                                        AngularGradient(
-                                            gradient: Gradient(
-                                                colors: [.cyan, .blue, .yellow, .blue, .cyan]
-                                            ),
-                                            center: .center,
-                                            angle: gradientAngle
-                                        ),
-                                        lineWidth: 1.5
-                                    )
-                                    .opacity(gradientOpacity)
+                            .stroke(
+                                AngularGradient(
+                                    gradient: Gradient(
+                                        colors: [.cyan, .blue, .yellow, .blue, .cyan]
+                                    ),
+                                    center: .center,
+                                    angle: gradientAngle
+                                ),
+                                lineWidth: 1.5
                             )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.gray.opacity(0.4), lineWidth: 1)
-                            )
+                            .opacity(gradientOpacity)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.gray.opacity(0.4), lineWidth: 1)
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 12))
                     .onTapGesture {
