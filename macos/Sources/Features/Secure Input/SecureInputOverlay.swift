@@ -14,14 +14,16 @@ struct SecureInputOverlay: View {
                 Spacer()
 
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.primary)
-                    .frame(width: 24, height: 24)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+                    .foregroundColor(.black)
+                    .frame(width: 35, height: 35)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(nsColor: .windowBackgroundColor).opacity(0.85))
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.clear)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
+                                RoundedRectangle(cornerRadius: 12)
                                     .stroke(
                                         AngularGradient(
                                             gradient: Gradient(
@@ -35,10 +37,11 @@ struct SecureInputOverlay: View {
                                     .opacity(gradientOpacity)
                             )
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.gray.opacity(0.4), lineWidth: 1)
                             )
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 12))
                     .onTapGesture {
                         isPopover = true
                     }
