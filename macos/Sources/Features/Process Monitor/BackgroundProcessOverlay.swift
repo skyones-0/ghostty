@@ -6,9 +6,6 @@ struct BackgroundProcessOverlay: View {
     var onKillJob: ((TerminalJob) -> Void)? = nil
     var onCancelTask: ((BackgroundTaskItem) -> Void)? = nil
 
-    // Animations
-    @State private var gradientAngle: Angle = .degrees(0)
-    @State private var gradientOpacity: CGFloat = 0.65
     @State private var isHovered = false
 
     // Popover explainer text
@@ -25,25 +22,7 @@ struct BackgroundProcessOverlay: View {
             .frame(width: 19, height: 19)
             .foregroundColor(.black)
             .frame(width: 35, height: 35)
-            .background(
-                Rectangle()
-                    .fill(
-                        AngularGradient(
-                            gradient: Gradient(
-                                colors: [.purple, .blue, .cyan, .blue, .purple]
-                            ),
-                            center: .center,
-                            angle: gradientAngle
-                        )
-                    )
-                    .blur(radius: 4, opaque: true)
-                    .opacity(gradientOpacity)
-            )
-            .mask(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
-            )
+            .background(GhosttyOverlayBackground(cornerRadius: 12, isPermanent: true))
             .overlay(alignment: .topTrailing) {
                 if totalCount > 1 {
                     Text("\(totalCount)")
@@ -51,7 +30,7 @@ struct BackgroundProcessOverlay: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
-                        .background(Color.purple)
+                        .background(Color.accentColor)
                         .clipShape(Capsule())
                         .offset(x: 4, y: -4)
                 }
@@ -71,7 +50,7 @@ struct BackgroundProcessOverlay: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 6) {
                         Image(systemName: "platter.2.filled.iphone.landscape")
-                            .foregroundColor(.purple)
+                            .foregroundColor(.accentColor)
                         Text("Actividad en Background (\(totalCount))")
                             .font(.system(size: 13, weight: .bold))
                         Spacer()
@@ -198,14 +177,6 @@ struct BackgroundProcessOverlay: View {
                 }
                 .padding(14)
                 .frame(minWidth: 280, maxWidth: 360)
-            }
-            .onAppear {
-                withAnimation(Animation.linear(duration: 2.5).repeatForever(autoreverses: false)) {
-                    gradientAngle = .degrees(360)
-                }
-                withAnimation(Animation.linear(duration: 2.0).repeatForever(autoreverses: true)) {
-                    gradientOpacity = 0.95
-                }
             }
     }
 }

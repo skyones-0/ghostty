@@ -42,8 +42,8 @@ public struct SidebarHubView: View {
                     } label: {
                         ZStack(alignment: .topTrailing) {
                             Image(systemName: tab.iconName)
-                                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                                .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                                .font(.system(size: 12, weight: (isSelected || (tab == .tasks && taskManager.activeCount > 0)) ? .semibold : .regular))
+                                .foregroundStyle((tab == .tasks && taskManager.activeCount > 0) ? Color.black : (isSelected ? Color.primary : Color.secondary))
                                 .frame(maxWidth: .infinity, minHeight: 24)
 
                             // Status indicators / Badges
@@ -56,10 +56,10 @@ public struct SidebarHubView: View {
                             } else if tab == .tasks && taskManager.activeCount > 0 {
                                 Text("\(taskManager.activeCount)")
                                     .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(Color.white)
+                                    .foregroundStyle(Color.black)
                                     .padding(.horizontal, 3.5)
                                     .padding(.vertical, 0.5)
-                                    .background(Color.accentColor)
+                                    .background(Color.white.opacity(0.85))
                                     .clipShape(Capsule())
                                     .padding(.trailing, 3)
                                     .padding(.top, 2)
@@ -67,8 +67,17 @@ public struct SidebarHubView: View {
                         }
                         .contentShape(Rectangle())
                         .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(isSelected ? Color.primary.opacity(0.12) : (isHovered ? Color.primary.opacity(0.06) : Color.clear))
+                            ZStack {
+                                if tab == .tasks && taskManager.activeCount > 0 {
+                                    GhosttyOverlayBackground(cornerRadius: 6, isPermanent: true)
+                                } else if isSelected {
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(Color.primary.opacity(0.12))
+                                } else if isHovered {
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(Color.primary.opacity(0.06))
+                                }
+                            }
                         )
                     }
                     .buttonStyle(.plain)
