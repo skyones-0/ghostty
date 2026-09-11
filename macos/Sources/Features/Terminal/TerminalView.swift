@@ -162,8 +162,8 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                     .frame(maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Ignore safe area to extend up into the titlebar region
-                .ignoresSafeArea(.container, edges: .top)
+                // Ignore safe area to extend up in to the titlebar region if we have the "hidden" titlebar style
+                .ignoresSafeArea(.container, edges: ghostty.config.macosTitlebarStyle == .hidden ? .top : [])
 
                 if let surfaceView = lastFocusedSurface?.value {
                     TerminalCommandPaletteView(

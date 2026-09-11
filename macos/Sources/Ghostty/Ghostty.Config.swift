@@ -311,7 +311,7 @@ extension Ghostty {
             case "false":
                 nil
             case "true":
-                .native
+                windowFullscreenMode
             case "non-native":
                 .nonNative
             case "non-native-visible-menu":
