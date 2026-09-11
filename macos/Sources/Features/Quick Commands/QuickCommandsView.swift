@@ -348,7 +348,7 @@ struct QuickCommandsView: View {
                                     command: item.command,
                                     configured: item.configured,
                                     surface: surface,
-                                    shortcutNumber: index < 9 ? index + 1 : nil,
+                                    shortcutNumber: nil,
                                     isHighlighted: state.selectedIndex == index,
                                     onSelect: {
                                         // Do not lock persistent focus on click
@@ -761,6 +761,8 @@ private struct QuickCommandCard: View, Equatable {
                         if let grp = command.group, !grp.isEmpty {
                             Text(cleanPresetTitle(grp))
                                 .font(.system(size: 9, weight: .medium))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
                                 .background(Color.secondary.opacity(0.15))
@@ -774,7 +776,9 @@ private struct QuickCommandCard: View, Equatable {
                                     .font(.system(size: 8))
                                 Text("<\(command.manualPlaceholders.first ?? "")>")
                                     .font(.system(size: 9))
+                                    .lineLimit(1)
                             }
+                            .fixedSize(horizontal: true, vertical: false)
                             .foregroundStyle(Color.accentColor)
                         } else if command.command.contains("{clipboard}") || command.command.contains("<clipboard>") {
                             Image(systemName: "doc.on.clipboard")
@@ -789,12 +793,6 @@ private struct QuickCommandCard: View, Equatable {
                         }
 
                         Spacer()
-
-                        if let num = shortcutNumber {
-                            Text("⌘\(num)")
-                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(Color.secondary.opacity(0.7))
-                        }
                     }
                     .contentShape(Rectangle())
                 }
@@ -839,6 +837,7 @@ private struct QuickCommandCard: View, Equatable {
                         .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .focusable(false)
                 .fixedSize()
                 .accessibilityLabel("Options for \(command.title)")
