@@ -152,9 +152,19 @@ struct QuickCommandsView: View {
                 .accessibilityLabel("Broadcast to all splits")
                 .accessibilityValue(state.isBroadcast ? "On" : "Off")
 
-                // Add command (minimalist Ghostty-proportioned icon)
-                Button {
-                    editing = QuickCommand(title: "", command: "", group: state.selectedGroup)
+                // Add command or group (minimalist Ghostty-proportioned icon)
+                Menu {
+                    Button {
+                        editing = QuickCommand(title: "", command: "", group: state.selectedGroup)
+                    } label: {
+                        Label("New Command", systemImage: "apple.terminal")
+                    }
+
+                    Button {
+                        isCreatingGroup = true
+                    } label: {
+                        Label("New Group", systemImage: "folder.badge.plus")
+                    }
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .medium))
@@ -162,9 +172,10 @@ struct QuickCommandsView: View {
                         .frame(width: 20, height: 20)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .help("Add Command")
-                .accessibilityLabel("Add Command")
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .help("Add Command or Group")
+                .accessibilityLabel("Add Command or Group")
                 .disabled(!library.canWrite)
             }
 
@@ -192,9 +203,9 @@ struct QuickCommandsView: View {
                     Button {
                         isCreatingGroup = true
                     } label: {
-                        HStack(spacing: 2) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 9, weight: .bold))
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.badge.plus")
+                                .font(.system(size: 10, weight: .medium))
                             Text("Group")
                                 .font(.caption2)
                         }
