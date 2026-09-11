@@ -12,7 +12,7 @@ struct EnterpriseSessionsTests {
         let cmd = session.buildConnectCommand()
         #expect(cmd.contains("ssh"))
         #expect(cmd.contains("-o ControlMaster=auto"))
-        #expect(cmd.contains("-o ControlPath=/tmp/ghostty-ssh-%C.sock"))
+        #expect(cmd.contains("-o ControlPath=/tmp/spectre-ssh-%C.sock"))
         #expect(cmd.contains("-o ControlPersist=10m"))
         #expect(cmd.contains("192.168.1.100"))
         #expect(!cmd.contains("-p"))
@@ -106,7 +106,7 @@ struct EnterpriseSessionsTests {
         let args = context.buildBaseSCPArguments()
         #expect(args.contains("-o"))
         #expect(args.contains("ControlMaster=auto"))
-        #expect(args.contains("ControlPath=/tmp/ghostty-ssh-%C.sock"))
+        #expect(args.contains("ControlPath=/tmp/spectre-ssh-%C.sock"))
         #expect(args.contains("-P"))
         #expect(args.contains("2200"))
         #expect(args.contains("-J"))
@@ -213,7 +213,7 @@ struct EnterpriseSessionsTests {
         let fileContent = try String(contentsOf: logURL!, encoding: .utf8)
 
         // Assert header exists
-        #expect(fileContent.contains("=== Ghostty Session Log: \(testSessionName) ==="))
+        #expect(fileContent.contains("=== Spectre Pro Session Log: \(testSessionName) ==="))
         #expect(fileContent.contains("=== Session Ended:"))
 
         // Assert ANSI sequence was stripped

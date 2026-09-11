@@ -1,13 +1,13 @@
-# 👻 Ghostty (macOS Apple Silicon Edition)
+# ⚡ Spectre Pro (macOS Apple Silicon Edition)
 
 [![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20(ARM64)-black?logo=apple&style=flat-square)](https://github.com/skyones-0/ghostty)
-[![Version](https://img.shields.io/badge/version-3.0.0.1a-blue?style=flat-square)](https://github.com/skyones-0/ghostty/releases/tag/v3.0.0.1a)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue?style=flat-square)](https://github.com/skyones-0/ghostty/releases/tag/v1.0.1)
 [![Renderer](https://img.shields.io/badge/renderer-Metal%20GPU-red?style=flat-square)](https://github.com/skyones-0/ghostty)
 [![License](https://img.shields.io/badge/license-MPL%202.0-green?style=flat-square)](LICENSE)
 
-Fast, native, GPU-accelerated terminal emulator engineered **exclusively for macOS Apple Silicon (M1/M2/M3/M4)**.
+**Spectre Pro** is the high-performance Enterprise Terminal & Infrastructure Console engineered **exclusively for macOS Apple Silicon (M1/M2/M3/M4)**.
 
-This distribution ([`skyones-0/ghostty`](https://github.com/skyones-0/ghostty)) transforms Ghostty into an enterprise-grade workstation for system administrators, DevOps engineers, and network specialists—combining the raw speed of Metal GPU rendering with the depth and control of **SecureCRT** and **Core Shell**.
+Powered by a native Zig core and hardware-accelerated Metal GPU renderer, **Spectre Pro** elevates the terminal experience for system administrators, DevOps engineers, and network specialists—combining blazing rendering speeds (>176,000 lines/sec) with the depth, connectivity, and control of **SecureCRT** and **Core Shell**.
 
 ---
 
@@ -15,19 +15,19 @@ This distribution ([`skyones-0/ghostty`](https://github.com/skyones-0/ghostty)) 
 
 Pre-built and optimized release binaries are available for direct download:
 
-### [⬇️ **Download Ghostty v3.0.0.1a for macOS (Apple Silicon ARM64)**](https://github.com/skyones-0/ghostty/releases/download/v3.0.0.1a/Ghostty-macos-arm64-v3.0.0.1a.zip)
+### [⬇️ **Download Spectre Pro v1.0.1 for macOS (Apple Silicon ARM64)**](https://github.com/skyones-0/ghostty/releases/download/v1.0.1/SpectrePro-macos-arm64-v1.0.1.zip)
 
 > **Installation (Quick 3-Step Setup):**
-> 1. Download and extract `Ghostty-macos-arm64-v3.0.0.1a.zip`.
-> 2. Move `Ghostty.app` into your `/Applications` directory.
+> 1. Download and extract `SpectrePro-macos-arm64-v1.0.1.zip`.
+> 2. Move `Spectre Pro.app` into your `/Applications` directory.
 > 3. Remove the macOS quarantine attribute to permit execution:
 > ```bash
-> xattr -cr /Applications/Ghostty.app
+> xattr -cr "/Applications/Spectre Pro.app"
 > ```
 
 ---
 
-## ✨ Exclusive Features & Enhancements (v3.0.0.1a)
+## ✨ Exclusive Features & Enhancements (v1.0.1)
 
 ### 1. 🛡️ Enterprise SSH Session Engine (SecureCRT & Core Shell Grade)
 * **Full OpenSSH Specifications**:
@@ -103,10 +103,14 @@ Pre-built and optimized release binaries are available for direct download:
 # Build optimized ReleaseLocal bundle with Sparkle library validation support
 nu macos/build.nu --configuration ReleaseLocal --action build
 
-# Install into /Applications
-rm -rf /Applications/Ghostty.app
-cp -R macos/build/ReleaseLocal/Ghostty.app /Applications/Ghostty.app
-xattr -cr /Applications/Ghostty.app
+# Install into /Applications as Spectre Pro.app
+rm -rf "/Applications/Spectre Pro.app"
+cp -R macos/build/ReleaseLocal/Ghostty.app "/Applications/Spectre Pro.app"
+xattr -cr "/Applications/Spectre Pro.app"
+
+# Install CLI binary 'spectre'
+mkdir -p ~/.local/bin
+ln -sf "/Applications/Spectre Pro.app/Contents/MacOS/ghostty" ~/.local/bin/spectre
 ```
 
 ---

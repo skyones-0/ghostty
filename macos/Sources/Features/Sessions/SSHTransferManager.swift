@@ -37,7 +37,7 @@ public struct ActiveSSHContext: Equatable {
         self.port = port
         self.identityFile = identityFile
         self.jumpHost = jumpHost
-        self.controlPath = "/tmp/ghostty-ssh-%C.sock"
+        self.controlPath = "/tmp/spectre-ssh-%C.sock"
     }
 
     public var targetSpec: String {

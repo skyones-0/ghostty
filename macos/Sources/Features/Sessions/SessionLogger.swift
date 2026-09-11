@@ -31,9 +31,9 @@ public final class SessionLogger: ObservableObject {
 
     public var logsDirectoryURL: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let ghosttyLogs = docs.appendingPathComponent("Ghostty Logs", isDirectory: true)
-        try? FileManager.default.createDirectory(at: ghosttyLogs, withIntermediateDirectories: true)
-        return ghosttyLogs
+        let spectreLogs = docs.appendingPathComponent("Spectre Pro Logs", isDirectory: true)
+        try? FileManager.default.createDirectory(at: spectreLogs, withIntermediateDirectories: true)
+        return spectreLogs
     }
 
     public func startRecording(sessionName: String) {
@@ -60,7 +60,7 @@ public final class SessionLogger: ObservableObject {
         self.elapsedTimeFormatted = "00:00"
 
         // Initial Header
-        let header = "=== Ghostty Session Log: \(currentSessionName) ===\n=== Started: \(Date()) ===\n\n"
+        let header = "=== Spectre Pro Session Log: \(currentSessionName) ===\n=== Started: \(Date()) ===\n\n"
         if let data = header.data(using: .utf8) {
             handle.write(data)
             recordedBytes += data.count

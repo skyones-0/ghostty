@@ -162,7 +162,7 @@ public struct SavedSession: Identifiable, Codable, Equatable {
 
             // Multiplexing for zero-handshake file transfers (SFTP / SCP)
             parts.append("-o ControlMaster=auto")
-            parts.append("-o ControlPath=/tmp/ghostty-ssh-%C.sock")
+            parts.append("-o ControlPath=/tmp/spectre-ssh-%C.sock")
             parts.append("-o ControlPersist=10m")
 
             if let p = port, p != 22 {

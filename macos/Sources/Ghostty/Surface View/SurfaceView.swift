@@ -221,8 +221,9 @@ extension Ghostty {
                 if KeywordHighlighter.shared.isEnabled {
                     KeywordHighlighter.shared.scan(text: text)
                 }
-                // Detect ghostty-get trigger: GHOSTTY_DOWNLOAD:<path>
-                if let range = text.range(of: "GHOSTTY_DOWNLOAD:") {
+                // Detect download triggers: SPECTRE_DOWNLOAD:<path> or GHOSTTY_DOWNLOAD:<path>
+                let downloadMarker = text.range(of: "SPECTRE_DOWNLOAD:") ?? text.range(of: "GHOSTTY_DOWNLOAD:")
+                if let range = downloadMarker {
                     let after = text[range.upperBound...]
                     let candidate = after.components(separatedBy: .newlines).first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     if !candidate.isEmpty && SSHTransferManager.shared.activeTransfer == nil {
