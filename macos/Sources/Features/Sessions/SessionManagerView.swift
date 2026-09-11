@@ -160,6 +160,11 @@ public struct SavedSession: Identifiable, Codable, Equatable {
         default:
             var parts: [String] = ["ssh"]
 
+            // Multiplexing for zero-handshake file transfers (SFTP / SCP)
+            parts.append("-o ControlMaster=auto")
+            parts.append("-o ControlPath=/tmp/ghostty-ssh-%C.sock")
+            parts.append("-o ControlPersist=10m")
+
             if let p = port, p != 22 {
                 parts.append("-p \(p)")
             }
@@ -535,6 +540,10 @@ public struct SessionManagerView: View {
 
     private func handleConnect(session: SavedSession, inNewTab: Bool, inSplit: Bool) {
         let cmd = session.buildConnectCommand()
+
+        if let surface = surface {
+            SSHTransferManager.shared.registerContext(for: surface.id, session: session)
+        }
 
         if session.sessionLogging {
             SessionLogger.shared.startRecording(sessionName: session.name)

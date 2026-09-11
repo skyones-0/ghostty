@@ -217,9 +217,17 @@ extension Ghostty {
             }
             .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
                 guard isFocusedSurface && windowFocus else { return }
+                let text = surfaceView.readVisibleText()
                 if KeywordHighlighter.shared.isEnabled {
-                    let text = surfaceView.readVisibleText()
                     KeywordHighlighter.shared.scan(text: text)
+                }
+                // Detect ghostty-get trigger: GHOSTTY_DOWNLOAD:<path>
+                if let range = text.range(of: "GHOSTTY_DOWNLOAD:") {
+                    let after = text[range.upperBound...]
+                    let candidate = after.components(separatedBy: .newlines).first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    if !candidate.isEmpty && SSHTransferManager.shared.activeTransfer == nil {
+                        SSHTransferManager.shared.downloadFile(remotePath: candidate, surface: surfaceView)
+                    }
                 }
             }
         }
@@ -249,6 +257,10 @@ extension Ghostty {
 
                 if isFocusedSurface && windowFocus && sessionLogger.isRecording {
                     SessionRecordingIndicator()
+                }
+
+                if isFocusedSurface && windowFocus {
+                    SSHTransferOverlay()
                 }
 
                 if isFocusedSurface && windowFocus, let status = expectSend.currentStatus {

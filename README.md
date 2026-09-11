@@ -1,13 +1,13 @@
 # 👻 Ghostty (macOS Apple Silicon Edition)
 
 [![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20(ARM64)-black?logo=apple&style=flat-square)](https://github.com/skyones-0/ghostty)
-[![Version](https://img.shields.io/badge/version-1.3.2-blue?style=flat-square)](https://github.com/skyones-0/ghostty/releases/tag/v1.3.2)
+[![Version](https://img.shields.io/badge/version-3.0.0.1a-blue?style=flat-square)](https://github.com/skyones-0/ghostty/releases/tag/v3.0.0.1a)
 [![Renderer](https://img.shields.io/badge/renderer-Metal%20GPU-red?style=flat-square)](https://github.com/skyones-0/ghostty)
 [![License](https://img.shields.io/badge/license-MPL%202.0-green?style=flat-square)](LICENSE)
 
 Fast, native, GPU-accelerated terminal emulator engineered **exclusively for macOS Apple Silicon (M1/M2/M3/M4)**.
 
-This distribution ([`skyones-0/ghostty`](https://github.com/skyones-0/ghostty)) brings specialized productivity enhancements tailored for modern developers, hardware hackers, and DevOps engineers on macOS.
+This distribution ([`skyones-0/ghostty`](https://github.com/skyones-0/ghostty)) transforms Ghostty into an enterprise-grade workstation for system administrators, DevOps engineers, and network specialists—combining the raw speed of Metal GPU rendering with the depth and control of **SecureCRT** and **Core Shell**.
 
 ---
 
@@ -15,10 +15,10 @@ This distribution ([`skyones-0/ghostty`](https://github.com/skyones-0/ghostty)) 
 
 Pre-built and optimized release binaries are available for direct download:
 
-### [⬇️ **Download Ghostty v1.3.2 for macOS (Apple Silicon ARM64)**](https://github.com/skyones-0/ghostty/releases/download/v1.3.2/Ghostty-macos-arm64-v1.3.2.zip)
+### [⬇️ **Download Ghostty v3.0.0.1a for macOS (Apple Silicon ARM64)**](https://github.com/skyones-0/ghostty/releases/download/v3.0.0.1a/Ghostty-macos-arm64-v3.0.0.1a.zip)
 
 > **Installation (Quick 3-Step Setup):**
-> 1. Download and extract `Ghostty-macos-arm64-v1.3.2.zip`.
+> 1. Download and extract `Ghostty-macos-arm64-v3.0.0.1a.zip`.
 > 2. Move `Ghostty.app` into your `/Applications` directory.
 > 3. Remove the macOS quarantine attribute to permit execution:
 > ```bash
@@ -27,63 +27,66 @@ Pre-built and optimized release binaries are available for direct download:
 
 ---
 
-## ✨ Exclusive Features & Enhancements
+## ✨ Exclusive Features & Enhancements (v3.0.0.1a)
 
-### 1. ⚡ Quick Commands Sidebar
-* **Global Shortcut**: `⌘ ⇧ B` or click the **floating action button** in the bottom-right corner of the terminal window.
-* **Minimalist Floating Toggle Button**: Embedded directly in the terminal viewport (`SidebarToggleOverlay`), featuring a translucent glass design and animated neon gradient glow on hover.
-* **1-Click Command Execution**:
-  * Run directly in the active terminal surface (`▶`).
-  * Insert command into the prompt for inspection without executing (`✎`).
-  * **Split & Send**: Automatically creates a new horizontal split to the right and executes the command immediately.
-* **Interactive Parameter Modals**: Commands containing placeholders (such as `<host>`, `<branch>`, or `<target>`) trigger an interactive modal prompt before execution.
-* **Dynamic Context Injection**: Supports dynamic variables like `{clipboard}` (active clipboard content) and `{selection}` (current terminal text selection).
-* **Broadcast Mode**: Replicates command execution across **all open terminal splits simultaneously** within the active tab.
-* **Full Keyboard Navigation**:
-  * `↑` / `↓` arrow keys for circular list navigation.
-  * `Return` to execute, `⌥ Return` to insert, and `Escape` to return focus to the terminal.
-* **Real-Time Atomic Dotfiles Sync**: Commands are stored in `~/.config/ghostty/quick-commands.json` and synchronized instantaneously across all windows and tabs via Darwin `FSEvents`.
+### 1. 🛡️ Enterprise SSH Session Engine (SecureCRT & Core Shell Grade)
+* **Full OpenSSH Specifications**:
+  * **Identity Keys**: Supports private keys (`id_ed25519`, `id_rsa`, `.pem`) with automatic discovery in `~/.ssh/` and native `Browse...` file picker.
+  * **Bastions & Jump Hosts**: Direct `-J user@bastion:port` chaining.
+  * **Session Stability**: KeepAlive intervals (`-o ServerAliveInterval=30`), compression (`-C`), and agent forwarding (`-A`).
+  * **Post-Login Automation**: Automatic command execution upon login (`-t "tmux new -A -s main"`).
+* **Port Forwarding Manager**: Interactive visual configuration of Local (`-L`), Remote (`-R`), and Dynamic SOCKS5 (`-D`) tunnels.
+* **Environment Badges**: At-a-glance safety badges (`PROD` in red, `STAGING` in orange, `DEV` in green, `LAB` in blue).
+* **Session Editor Modal (`⌘ E`)**: Professional 4-tab editor (`General`, `Authentication`, `Tunnels & Bastion`, `Advanced`).
+* **`~/.ssh/config` Sincronización**: Imports host configs, keys, and bastion settings automatically.
 
 ---
 
-### 2. 🔌 USB Serial Device Watcher (Hardware Detection)
-* **Real-Time IOKit Monitoring**: Automatically recognizes microcontrollers and serial devices upon connection (ESP32, Arduino, Raspberry Pi Pico, USB UART bridges, FTDI, CH340, CP2102).
-* **Ephemeral Floating Toast**: Displays an unobtrusive toast banner at the top of the terminal showing the device name, BSD path (`/dev/cu.usbserial...`), and a baud rate selector (115200, 9600, etc.).
-* **1-Click Connect**: Click **Connect** to automatically launch an interactive serial terminal session (`screen <device> <baud>`).
+### 2. ⚡ Smart SSH File Transfer (Zero-Latency Drag & Drop & Smart Paste)
+* **OpenSSH Socket Multiplexing (`ControlMaster`)**: Reuses the already-authenticated SSH tunnel over UNIX domain sockets (`/tmp/ghostty-ssh-%C.sock`) for 0ms transfer startup without entering passwords or 2FA tokens again.
+* **Smart Paste (`⌘ V`) in Full Screen**: Copy any file in Finder (`⌘ C`), switch to Ghostty in Full Screen, and press `⌘ V`—Ghostty uploads the file directly to the remote server and types its path in the prompt.
+* **Drag & Drop Upload**: Drop files from Finder onto the terminal to trigger automatic background SCP upload.
+* **Native Full Screen Picker (`⌘ ⇧ U`)**: Opens `NSOpenPanel` inside Ghostty to upload files without leaving full-screen mode.
+* **1-Click Download (`⌘ ⇧ D` / Context Menu)**: Right-click any file path on screen to download it directly to `~/Downloads/`.
+* **CLI Command `ghostty-get <file>`**: Type `ghostty-get backup.tar.gz` on the remote server to stream and download it to your Mac automatically.
+* **Floating Transfer HUD**: Displays live progress `[████████░░]` with instant **"Show in Finder"** and **"Open"** actions upon completion.
 
 ---
 
-### 3. 🌐 Local Development Server & TCP Port Detector
-* **Darwin Socket Inspection**: Continuously monitors child processes via kernel-level `proc_pidinfo(PROC_PIDTASKINFO)`.
-* **Automatic Port Discovery**: Detects when development servers bind to local TCP ports (e.g. Vite, Next.js, Django, FastAPI, Flask, Express, Docker, Go on ports `3000`, `5173`, `8000`, `8080`, `8787`).
-* **Ephemeral Floating Banner**: Displays the detected local address with a 1-click button to open directly in your default browser.
+### 3. 🔴 Forensic Session Recording (`SessionLogger`)
+* **1-Click Audit Logging**: Records terminal input and output directly to `~/Documents/Ghostty Logs/`.
+* **Millisecond Timestamps**: Injects `[YYYY-MM-DD HH:mm:ss.SSS]` on each line for post-incident analysis.
+* **ANSI Code Stripping**: Generates clean, human-readable log files ready for ticketing systems.
+* **Live Recording HUD**: Displays an animated `🔴 REC [00:03:12]` indicator with stop and reveal actions.
 
 ---
 
-### 4. 🔔 Long-Running Command Notifications
-* **Native Desktop Alerts**: Automatically sends a native macOS banner notification via `UNUserNotificationCenter` when any command exceeding 15 seconds completes while Ghostty or the tab is in the background.
-* **In-Terminal Completion Toast**: An ephemeral floating pill displays the exit code and total execution duration upon returning to the terminal.
+### 4. 🎯 Real-Time Keyword Highlighting (SecureCRT Style)
+* **Live Buffer Scanner**: Intercepts screen text in real-time without latency:
+  * **Critical & Errors**: `ERROR`, `FAIL`, `DOWN`, `CRITICAL`, `DENIED`, `PANIC` $\rightarrow$ Bold Red.
+  * **Operational States**: `UP`, `OK`, `SUCCESS`, `ESTABLISHED`, `ONLINE` $\rightarrow$ Mint Green.
+  * **Warnings & Alerts**: `WARNING`, `WARN`, `TIMEOUT`, `RETRY`, `DROPPED` $\rightarrow$ Amber.
+  * **Network Addresses**: IPv4 (`\b(?:\d{1,3}\.){3}\d{1,3}\b`) in Cyan, MAC addresses in Purple.
+* **Interactive HUD & Popover**: Live counter showing matching entities with 1-click clipboard copy.
 
 ---
 
-### 5. ☕ Keep Awake Mode (Caffeinate)
-* **Native Menu Bar Controls**: Easily toggle display and system sleep prevention directly from the application menu, keeping long builds, data transfers, or tasks uninterrupted.
+### 5. 🤖 Expect / Send Logon Scripting
+* **Prompt Automation**: Sequential triggers (`Expect: "Password:"` $\rightarrow$ `Send: "secret\n"`, `Expect: ">"` $\rightarrow$ `Send: "enable\n"`).
+* **Hardware & Appliance Ready**: Perfect for Cisco routers, serial consoles, and legacy systems lacking SSH key authentication.
 
 ---
 
-### 6. 📋 Copy Last Command Output (`⌘ ⇧ C`)
-* **Instant Extraction**: Copies the entire output of the last executed command to the macOS clipboard with visual HUD feedback, eliminating manual mouse scrolling and text selection.
+### 6. 🔌 Professional Serial Hardware Tools
+* **Send Break Signal**: Dedicated button emitting both POSIX `tcsendbreak` to `/dev/cu.*` and GNU screen break `Ctrl-A + b` to enter Cisco ROMMON and U-Boot bootloaders.
+* **Paste Throttling / Line Delay**: Throttles pasted configurations (20ms to 250ms per line) to prevent buffer overflows on 9600 baud UARTs.
 
 ---
 
-### 7. ⚙️ Real-Time Process & Resource Monitor
-* **Background Process Pill**: Displays an active background jobs badge (`[⠋ N bg]`) in the top bar.
-* **Process Popover**: Live CPU metrics with a 1-click `SIGTERM` kill action to quickly terminate runaway processes.
-
----
-
-### 8. 🛠️ Interactive Configuration Studio (`ghostty +config`)
-* Terminal-based interactive configuration editor covering 60+ settings with live theme previews.
+### 7. ⚡ Quick Commands Sidebar & Floating Platter Hub
+* **Global Shortcut**: `⌘ ⇧ B` or floating button.
+* **Unified Animated Gradient**: Harmonized rotating neon palette (`[.cyan, .blue, .yellow, .blue, .cyan]`) across SecureInput Lock, Task Platter, and Sidebar buttons.
+* **Task Overlay (`platter.2.filled.iphone.landscape`)**: Floating monitor showing active background jobs, transfers, and processes.
 
 ---
 
@@ -98,17 +101,12 @@ Pre-built and optimized release binaries are available for direct download:
 
 ```bash
 # Build optimized ReleaseLocal bundle with Sparkle library validation support
-zig build -Doptimize=ReleaseFast -Demit-macos-app=true
+nu macos/build.nu --configuration ReleaseLocal --action build
 
 # Install into /Applications
 rm -rf /Applications/Ghostty.app
 cp -R macos/build/ReleaseLocal/Ghostty.app /Applications/Ghostty.app
 xattr -cr /Applications/Ghostty.app
-```
-
-Or using the automated updater script:
-```bash
-./update-ghostty.sh --install
 ```
 
 ---

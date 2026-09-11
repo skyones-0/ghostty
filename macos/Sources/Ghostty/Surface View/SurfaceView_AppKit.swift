@@ -1614,6 +1614,17 @@ extension Ghostty {
             }
             menu.addItem(withTitle: "Paste", action: #selector(paste(_:)), keyEquivalent: "")
 
+            // Smart SSH Transfer Actions (Propuesta 1)
+            if SSHTransferManager.shared.hasActiveSSHContext(for: self.id) {
+                menu.addItem(.separator())
+                if let text = self.accessibilitySelectedText()?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty, !text.contains("\n") {
+                    item = menu.addItem(withTitle: "Download '\(text)' to ~/Downloads", action: #selector(downloadSelectedFileFromSSH(_:)), keyEquivalent: "")
+                    item.setImageIfDesired(systemSymbolName: "arrow.down.circle")
+                }
+                item = menu.addItem(withTitle: "Upload File to Server... (⌘⇧U)", action: #selector(uploadFileToSSH(_:)), keyEquivalent: "")
+                item.setImageIfDesired(systemSymbolName: "arrow.up.circle")
+            }
+
             menu.addItem(.separator())
             item = menu.addItem(withTitle: "Split Right", action: #selector(splitRight(_:)), keyEquivalent: "")
             item.setImageIfDesired(systemSymbolName: "rectangle.righthalf.inset.filled")
@@ -1651,6 +1662,15 @@ extension Ghostty {
         }
 
         @IBAction func paste(_ sender: Any?) {
+            // Smart Paste: Upload copied files when in active SSH session
+            if SSHTransferManager.shared.hasActiveSSHContext(for: self.id),
+               let fileURLs = NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
+               !fileURLs.isEmpty,
+               fileURLs.contains(where: { $0.isFileURL }) {
+                SSHTransferManager.shared.uploadFiles(fileURLs, surface: self)
+                return
+            }
+
             guard let surface = self.surface else { return }
             let action = "paste_from_clipboard"
             if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
@@ -2305,6 +2325,15 @@ extension Ghostty.SurfaceView {
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         let pb = sender.draggingPasteboard
 
+        // Smart Drop: Upload dragged files when connected to an SSH session
+        if SSHTransferManager.shared.hasActiveSSHContext(for: self.id),
+           let fileURLs = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
+           !fileURLs.isEmpty,
+           fileURLs.contains(where: { $0.isFileURL }) {
+            SSHTransferManager.shared.uploadFiles(fileURLs, surface: self)
+            return true
+        }
+
         let content = pb.getOpinionatedStringContents()
 
         if let content {
@@ -2315,6 +2344,29 @@ extension Ghostty.SurfaceView {
         }
 
         return false
+    }
+
+    @objc func uploadFileToSSH(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Upload to Server"
+        panel.message = "Choose files to upload to the active SSH session"
+
+        if let window = self.window {
+            panel.beginSheetModal(for: window) { [weak self] response in
+                guard let self = self, response == .OK else { return }
+                SSHTransferManager.shared.uploadFiles(panel.urls, surface: self)
+            }
+        } else if panel.runModal() == .OK {
+            SSHTransferManager.shared.uploadFiles(panel.urls, surface: self)
+        }
+    }
+
+    @objc func downloadSelectedFileFromSSH(_ sender: Any?) {
+        guard let path = self.accessibilitySelectedText()?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else { return }
+        SSHTransferManager.shared.downloadFile(remotePath: path, surface: self)
     }
 
     public func readVisibleText() -> String {
