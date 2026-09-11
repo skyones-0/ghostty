@@ -7,112 +7,112 @@
 
 Fast, native, GPU-accelerated terminal emulator engineered **exclusively for macOS Apple Silicon (M1/M2/M3/M4)**.
 
-This distribution ([`skyones-0/ghostty`](https://github.com/skyones-0/ghostty)) brings specialized productivity enhancements tailored for modern developers, hardware hackers, and devops engineers on macOS.
+This distribution ([`skyones-0/ghostty`](https://github.com/skyones-0/ghostty)) brings specialized productivity enhancements tailored for modern developers, hardware hackers, and DevOps engineers on macOS.
 
 ---
 
-## 🚀 Descargar y Probar
+## 🚀 Download & Quickstart
 
-Ya puedes descargar la versión final compilada y optimizada lista para usar:
+Pre-built and optimized release binaries are available for direct download:
 
-### [⬇️ **Descargar Ghostty v1.3.2 para macOS (Apple Silicon ARM64)**](https://github.com/skyones-0/ghostty/releases/download/v1.3.2/Ghostty-macos-arm64-v1.3.2.zip)
+### [⬇️ **Download Ghostty v1.3.2 for macOS (Apple Silicon ARM64)**](https://github.com/skyones-0/ghostty/releases/download/v1.3.2/Ghostty-macos-arm64-v1.3.2.zip)
 
-> **Instalación rápida en 1 paso:**
-> 1. Descarga el archivo `.zip` y descomprímelo.
-> 2. Mueve `Ghostty.app` a tu carpeta `/Applications`.
-> 3. Abre tu terminal y ejecuta para habilitar la apertura sin restricciones de Gatekeeper:
+> **Installation (Quick 3-Step Setup):**
+> 1. Download and extract `Ghostty-macos-arm64-v1.3.2.zip`.
+> 2. Move `Ghostty.app` into your `/Applications` directory.
+> 3. Remove the macOS quarantine attribute to permit execution:
 > ```bash
 > xattr -cr /Applications/Ghostty.app
 > ```
 
 ---
 
-## ✨ Características Exclusivas de Esta Versión
+## ✨ Exclusive Features & Enhancements
 
-### 1. ⚡ Barra Lateral de Comandos Rápidos (*Quick Commands Sidebar*)
-* **Atajo global**: `⌘ ⇧ B` o pulsando el **botón flotante** en la esquina inferior derecha.
-* **Botón flotante minimalista**: Integrado en el visor del terminal (`SidebarToggleOverlay`) con material traslúcido y resplandor animado de neón al pasar el cursor.
-* **Acciones en 1 click**:
-  * Ejecutar directamente en el terminal activo (`▶`).
-  * Pegar en la línea de comandos sin ejecutar para revisión (`✎`).
-  * **Split & Send**: Abre automáticamente una división a la derecha y ejecuta el comando.
-* **Modal de Parámetros Interactivo**: Si un comando contiene marcadores como `<host>`, `<rama>` o `<entorno>`, se despliega un diálogo emergente para rellenarlos antes de enviar.
-* **Inyección Dinámica**: Soporte para variables automáticas como `{clipboard}` (contenido del portapapeles) y `{selection}` (texto seleccionado en el terminal).
-* **Modo Transmisión (*Broadcast Mode*)**: Replica el envío del comando a **todas las divisiones de terminal abiertas** en la pestaña de forma simultánea.
-* **Navegación por Teclado Completa**:
-  * Flechas `↑` / `↓` para navegar cíclicamente.
-  * `Return` para ejecutar, `⌥ Return` para insertar, `Escape` para devolver el foco al terminal.
-* **Sincronización en Tiempo Real**: Guarda tus comandos en `~/.config/ghostty/quick-commands.json` y se actualiza al instante entre pestañas y ventanas mediante Darwin FSEvents.
-
----
-
-### 2. 🔌 Detector de Dispositivos Serie USB (*Hardware Watcher*)
-* **Detección instantánea vía IOKit**: Al conectar cualquier placa o dispositivo USB serie (ESP32, Arduino, Raspberry Pi Pico, módems, conversores FTDI/CH340/CP2102), Ghostty lo reconoce al segundo.
-* **Toast Flotante Efímero**: Muestra una alerta flotante en la parte superior del terminal con el nombre del dispositivo, ruta (`/dev/cu.usbserial...`) y un selector de baudios (115200, 9600, etc.).
-* **Conexión en 1 click**: Botón **Conectar** que abre una sesión de consola serie interactiva (`screen <puerto> <baud>`).
+### 1. ⚡ Quick Commands Sidebar
+* **Global Shortcut**: `⌘ ⇧ B` or click the **floating action button** in the bottom-right corner of the terminal window.
+* **Minimalist Floating Toggle Button**: Embedded directly in the terminal viewport (`SidebarToggleOverlay`), featuring a translucent glass design and animated neon gradient glow on hover.
+* **1-Click Command Execution**:
+  * Run directly in the active terminal surface (`▶`).
+  * Insert command into the prompt for inspection without executing (`✎`).
+  * **Split & Send**: Automatically creates a new horizontal split to the right and executes the command immediately.
+* **Interactive Parameter Modals**: Commands containing placeholders (such as `<host>`, `<branch>`, or `<target>`) trigger an interactive modal prompt before execution.
+* **Dynamic Context Injection**: Supports dynamic variables like `{clipboard}` (active clipboard content) and `{selection}` (current terminal text selection).
+* **Broadcast Mode**: Replicates command execution across **all open terminal splits simultaneously** within the active tab.
+* **Full Keyboard Navigation**:
+  * `↑` / `↓` arrow keys for circular list navigation.
+  * `Return` to execute, `⌥ Return` to insert, and `Escape` to return focus to the terminal.
+* **Real-Time Atomic Dotfiles Sync**: Commands are stored in `~/.config/ghostty/quick-commands.json` and synchronized instantaneously across all windows and tabs via Darwin `FSEvents`.
 
 ---
 
-### 3. 🌐 Detector Automático de Servidores Locales (*Port Detector*)
-* **Inspección de sockets en vivo**: Monitorea los procesos hijos en ejecución mediante llamadas al kernel Darwin `proc_pidinfo(PROC_PIDTASKINFO)`.
-* **Detección inteligente de puertos**: Al arrancar servidores de desarrollo (Vite, Next.js, Django, FastAPI, Flask, Express, Docker, Go, etc.), detecta el puerto TCP abierto (`3000`, `5173`, `8000`, `8080`, `8787`...).
-* **Banner flotante interactivo**: Muestra la URL local activa con un botón de **Abrir en Navegador** directo.
+### 2. 🔌 USB Serial Device Watcher (Hardware Detection)
+* **Real-Time IOKit Monitoring**: Automatically recognizes microcontrollers and serial devices upon connection (ESP32, Arduino, Raspberry Pi Pico, USB UART bridges, FTDI, CH340, CP2102).
+* **Ephemeral Floating Toast**: Displays an unobtrusive toast banner at the top of the terminal showing the device name, BSD path (`/dev/cu.usbserial...`), and a baud rate selector (115200, 9600, etc.).
+* **1-Click Connect**: Click **Connect** to automatically launch an interactive serial terminal session (`screen <device> <baud>`).
 
 ---
 
-### 4. 🔔 Notificaciones de Comandos de Larga Duración
-* **Alertas inteligentes de escritorio**: Si ejecutas un comando que toma más de 15 segundos (como `npm install`, `cargo build`, migraciones o backups) y cambias de aplicación o ventana, Ghostty te enviará una notificación nativa de macOS (`UNUserNotificationCenter`) cuando termine.
-* **Toast interno de finalización**: Al volver al terminal, un toast flotante te confirmará el código de salida y el tiempo total de ejecución.
+### 3. 🌐 Local Development Server & TCP Port Detector
+* **Darwin Socket Inspection**: Continuously monitors child processes via kernel-level `proc_pidinfo(PROC_PIDTASKINFO)`.
+* **Automatic Port Discovery**: Detects when development servers bind to local TCP ports (e.g. Vite, Next.js, Django, FastAPI, Flask, Express, Docker, Go on ports `3000`, `5173`, `8000`, `8080`, `8787`).
+* **Ephemeral Floating Banner**: Displays the detected local address with a 1-click button to open directly in your default browser.
 
 ---
 
-### 5. ☕ Mantener Despierto (*Keep Awake / Caffeinate*)
-* **Control en la barra de menú**: Activa o desactiva la inhibición de suspensión del sistema de macOS directamente desde Ghostty para evitar que tu Mac se duerma durante scripts largos o descargas.
+### 4. 🔔 Long-Running Command Notifications
+* **Native Desktop Alerts**: Automatically sends a native macOS banner notification via `UNUserNotificationCenter` when any command exceeding 15 seconds completes while Ghostty or the tab is in the background.
+* **In-Terminal Completion Toast**: An ephemeral floating pill displays the exit code and total execution duration upon returning to the terminal.
 
 ---
 
-### 6. 📋 Copiar Salida del Último Comando (`⌘ ⇧ C`)
-* **Extracción instantánea**: Copia el texto completo generado por la última orden ejecutada al portapapeles de macOS sin necesidad de seleccionarlo manualmente con el ratón. Incluye confirmación visual HUD.
+### 5. ☕ Keep Awake Mode (Caffeinate)
+* **Native Menu Bar Controls**: Easily toggle display and system sleep prevention directly from the application menu, keeping long builds, data transfers, or tasks uninterrupted.
 
 ---
 
-### 7. ⚙️ Monitor de Procesos y Recursos en Vivo
-* **Píldora de tareas activas**: Muestra un indicador en tiempo real en la cabecera (`[⠋ N bg]`) con el número de comandos en segundo plano.
-* **Menú desplegable de control**: Lista de procesos con consumo de CPU Darwin y botón para finalizar tareas colgadas con `SIGTERM` en 1 click.
+### 6. 📋 Copy Last Command Output (`⌘ ⇧ C`)
+* **Instant Extraction**: Copies the entire output of the last executed command to the macOS clipboard with visual HUD feedback, eliminating manual mouse scrolling and text selection.
 
 ---
 
-### 8. 🛠️ Config Studio Interactivo (`ghostty +config`)
-* Interfaz interactiva desde terminal para configurar más de 60 opciones de Ghostty con vista previa de temas y paletas en vivo.
+### 7. ⚙️ Real-Time Process & Resource Monitor
+* **Background Process Pill**: Displays an active background jobs badge (`[⠋ N bg]`) in the top bar.
+* **Process Popover**: Live CPU metrics with a 1-click `SIGTERM` kill action to quickly terminate runaway processes.
 
 ---
 
-## 🛠️ Compilación desde el Código Fuente (macOS ARM64)
+### 8. 🛠️ Interactive Configuration Studio (`ghostty +config`)
+* Terminal-based interactive configuration editor covering 60+ settings with live theme previews.
 
-### Requisitos
-- macOS 14 o superior (Apple Silicon M1/M2/M3/M4)
-- **Xcode 26** con macOS SDK y Metal Toolchain
+---
+
+## 🛠️ Compiling from Source (macOS ARM64)
+
+### Requirements
+- macOS 14+ (Apple Silicon M1/M2/M3/M4)
+- **Xcode 26** with macOS 26 SDK and Metal Toolchain
 - **Zig 0.16.0** (`brew install zig`)
 
-### Compilación Rápida Optimizada
+### Build & Installation Command
 
 ```bash
-# Compila en ReleaseFast con firma ad-hoc local lista para Sparkle
+# Build optimized ReleaseLocal bundle with Sparkle library validation support
 zig build -Doptimize=ReleaseFast -Demit-macos-app=true
 
-# Instala la app en /Applications
+# Install into /Applications
 rm -rf /Applications/Ghostty.app
 cp -R macos/build/ReleaseLocal/Ghostty.app /Applications/Ghostty.app
 xattr -cr /Applications/Ghostty.app
 ```
 
-O usando el script automatizado:
+Or using the automated updater script:
 ```bash
 ./update-ghostty.sh --install
 ```
 
 ---
 
-## 📄 Licencia
+## 📄 License
 
-Ghostty está distribuido bajo la licencia Mozilla Public License 2.0. Consulta [LICENSE](LICENSE) para más detalles.
+Ghostty is licensed under the Mozilla Public License 2.0. See [LICENSE](LICENSE) for details.
