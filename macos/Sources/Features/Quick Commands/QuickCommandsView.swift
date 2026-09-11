@@ -142,19 +142,27 @@ struct QuickCommandsView: View {
                     state.isBroadcast.toggle()
                 } label: {
                     Image(systemName: state.isBroadcast ? "wave.3.backward.circle.fill" : "wave.3.backward")
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(state.isBroadcast ? Color.orange : Color.secondary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(state.isBroadcast ? "Broadcast active (send to all splits)" : "Broadcast: Send to all splits")
                 .accessibilityLabel("Broadcast to all splits")
                 .accessibilityValue(state.isBroadcast ? "On" : "Off")
 
-                // Add command
+                // Add command (minimalist Ghostty-proportioned icon)
                 Button {
                     editing = QuickCommand(title: "", command: "", group: state.selectedGroup)
                 } label: {
                     Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.secondary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .help("Add Command")
                 .accessibilityLabel("Add Command")
                 .disabled(!library.canWrite)
