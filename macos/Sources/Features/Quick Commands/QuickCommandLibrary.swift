@@ -37,10 +37,12 @@ final class QuickCommandLibrary: ObservableObject {
         var version = 1
         var commands: [QuickCommand]
         var groups: [String]? = []
+        var groupIcons: [String: String]? = [:]
     }
 
     @Published private(set) var commands: [QuickCommand] = []
     @Published private(set) var customGroups: [String] = []
+    @Published private(set) var groupIcons: [String: String] = [:]
     @Published private(set) var errorMessage: String?
     private(set) var canWrite = true
     let url: URL
@@ -106,6 +108,7 @@ final class QuickCommandLibrary: ObservableObject {
             }
             commands = document.commands
             customGroups = (document.groups ?? []).sorted()
+            groupIcons = document.groupIcons ?? [:]
             canWrite = true
             errorMessage = nil
         } catch {
@@ -114,13 +117,27 @@ final class QuickCommandLibrary: ObservableObject {
         }
     }
 
+    func icon(for group: String) -> String? {
+        if let explicit = groupIcons[group], !explicit.isEmpty {
+            return explicit
+        }
+        return GroupIconCatalog.defaultIcon(for: group)
+    }
+
     @discardableResult
-    func addGroup(_ group: String) -> Bool {
+    func addGroup(_ group: String, icon: String? = nil) -> Bool {
         let trimmed = group.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, !customGroups.contains(trimmed) else { return false }
+        guard !trimmed.isEmpty else { return false }
         var updated = customGroups
-        updated.append(trimmed)
-        return persist(commands, groups: updated.sorted())
+        if !updated.contains(trimmed) {
+            updated.append(trimmed)
+            updated.sort()
+        }
+        var icons = groupIcons
+        if let icon = icon, !icon.isEmpty {
+            icons[trimmed] = icon
+        }
+        return persist(commands, groups: updated, icons: icons)
     }
 
     @discardableResult
@@ -149,15 +166,24 @@ final class QuickCommandLibrary: ObservableObject {
     }
 
     @discardableResult
-    func renameGroup(oldName: String, newName: String) -> Bool {
+    func renameGroup(oldName: String, newName: String, newIcon: String? = nil) -> Bool {
         let trimmedNew = newName.trimmingCharacters(in: .whitespaces)
-        guard !trimmedNew.isEmpty, trimmedNew != oldName else { return false }
-        var groups = customGroups.map { $0 == oldName ? trimmedNew : $0 }
-        if !groups.contains(trimmedNew) {
-            groups.append(trimmedNew)
+        guard !trimmedNew.isEmpty else { return false }
+        var groups = customGroups
+        if oldName != trimmedNew {
+            groups = groups.map { $0 == oldName ? trimmedNew : $0 }
+            if !groups.contains(trimmedNew) {
+                groups.append(trimmedNew)
+            }
+            groups.removeAll { $0 == oldName }
+            groups = Array(Set(groups)).sorted()
         }
-        groups.removeAll { $0 == oldName }
-        groups.sort()
+
+        var icons = groupIcons
+        icons.removeValue(forKey: oldName)
+        if let newIcon, !newIcon.isEmpty {
+            icons[trimmedNew] = newIcon
+        }
 
         let updatedCommands = commands.map { cmd -> QuickCommand in
             if cmd.group == oldName {
@@ -167,13 +193,15 @@ final class QuickCommandLibrary: ObservableObject {
             }
             return cmd
         }
-        return persist(updatedCommands, groups: groups)
+        return persist(updatedCommands, groups: groups, icons: icons)
     }
 
     @discardableResult
     func deleteGroup(_ group: String) -> Bool {
         var groups = customGroups
         groups.removeAll { $0 == group }
+        var icons = groupIcons
+        icons.removeValue(forKey: group)
 
         let updatedCommands = commands.map { cmd -> QuickCommand in
             if cmd.group == group {
@@ -183,21 +211,23 @@ final class QuickCommandLibrary: ObservableObject {
             }
             return cmd
         }
-        return persist(updatedCommands, groups: groups)
+        return persist(updatedCommands, groups: groups, icons: icons)
     }
 
-    private func persist(_ updated: [QuickCommand], groups: [String]? = nil) -> Bool {
+    private func persist(_ updated: [QuickCommand], groups: [String]? = nil, icons: [String: String]? = nil) -> Bool {
         guard canWrite else { return false }
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let docGroups = groups ?? customGroups
-            let data = try encoder.encode(Document(commands: updated, groups: docGroups))
+            let docIcons = icons ?? groupIcons
+            let data = try encoder.encode(Document(commands: updated, groups: docGroups, groupIcons: docIcons))
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: url, options: .atomic)
             commands = updated
             customGroups = docGroups
+            groupIcons = docIcons
             errorMessage = nil
             if fileWatcher == nil {
                 startWatching()

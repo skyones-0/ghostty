@@ -60,6 +60,13 @@ private final class QuickCommandsKeyMonitor: ObservableObject {
     }
 }
 
+struct QuickCommandDisplayItem: Identifiable {
+    let command: QuickCommand
+    let configured: Bool
+
+    var id: UUID { command.id }
+}
+
 struct QuickCommandsView: View {
     let configuredCommands: [QuickCommand]
     let surface: Ghostty.SurfaceView?
@@ -98,10 +105,34 @@ struct QuickCommandsView: View {
         return groups.sorted()
     }
 
-    private func matchesFilter(_ cmd: QuickCommand) -> Bool {
-        if let selectedGroup = state.selectedGroup, !selectedGroup.isEmpty {
-            if cmd.group != selectedGroup { return false }
+    @State private var collapsedGroups: Set<String> = []
+
+    private func isGroupExpanded(_ group: String) -> Bool {
+        if !state.searchText.isEmpty { return true }
+        return !collapsedGroups.contains(group)
+    }
+
+    private func toggleGroup(_ group: String) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            if collapsedGroups.contains(group) {
+                collapsedGroups.remove(group)
+            } else {
+                collapsedGroups.insert(group)
+            }
         }
+    }
+
+    private func toggleCollapseAll() {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            if collapsedGroups.isEmpty {
+                collapsedGroups = Set(allGroups).union(["__ungrouped__"])
+            } else {
+                collapsedGroups.removeAll()
+            }
+        }
+    }
+
+    private func matchesFilter(_ cmd: QuickCommand) -> Bool {
         let query = state.searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if query.isEmpty { return true }
         if cmd.title.lowercased().contains(query) { return true }
@@ -110,13 +141,31 @@ struct QuickCommandsView: View {
         return false
     }
 
-    private var filteredCommands: [(command: QuickCommand, configured: Bool)] {
-        var results: [(command: QuickCommand, configured: Bool)] = []
+    private var visibleCommands: [QuickCommandDisplayItem] {
+        if allGroups.isEmpty { return filteredCommands }
+        var result: [QuickCommandDisplayItem] = []
+        for grp in allGroups {
+            let cmds = filteredCommands.filter { $0.command.group == grp }
+            if !cmds.isEmpty && isGroupExpanded(grp) {
+                result.append(contentsOf: cmds)
+            }
+        }
+        let ungrouped = filteredCommands.filter {
+            $0.command.group == nil || $0.command.group?.trimmingCharacters(in: .whitespaces).isEmpty == true
+        }
+        if !ungrouped.isEmpty && isGroupExpanded("__ungrouped__") {
+            result.append(contentsOf: ungrouped)
+        }
+        return result
+    }
+
+    private var filteredCommands: [QuickCommandDisplayItem] {
+        var results: [QuickCommandDisplayItem] = []
         for cmd in configuredCommands where matchesFilter(cmd) {
-            results.append((cmd, true))
+            results.append(QuickCommandDisplayItem(command: cmd, configured: true))
         }
         for cmd in library.commands where matchesFilter(cmd) {
-            results.append((cmd, false))
+            results.append(QuickCommandDisplayItem(command: cmd, configured: false))
         }
         return results
     }
@@ -184,6 +233,20 @@ struct QuickCommandsView: View {
                 .accessibilityLabel("Broadcast to all splits")
                 .accessibilityValue(state.isBroadcast ? "On" : "Off")
 
+                // Expand / Collapse All Accordion
+                Button {
+                    toggleCollapseAll()
+                } label: {
+                    Image(systemName: collapsedGroups.isEmpty ? "chevron.up.chevron.down" : "chevron.down")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.secondary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help(collapsedGroups.isEmpty ? "Collapse All Groups" : "Expand All Groups")
+
                 // Add command or group (minimalist Ghostty-proportioned icon)
                 Menu {
                     Button {
@@ -210,62 +273,6 @@ struct QuickCommandsView: View {
                 .accessibilityLabel("Add Command or Group")
                 .disabled(!library.canWrite)
                 .focusable(false)
-            }
-
-            // SecureCRT-style Horizontal Group Tabs
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 5) {
-                    GroupTabButton(
-                        title: "All",
-                        isSelected: state.selectedGroup == nil,
-                        count: configuredCommands.count + library.commands.count
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.15)) { state.selectedGroup = nil }
-                    }
-
-                    ForEach(allGroups, id: \.self) { grp in
-                        GroupTabButton(
-                            title: grp,
-                            isSelected: state.selectedGroup == grp,
-                            count: countForGroup(grp)
-                        ) {
-                            withAnimation(.easeInOut(duration: 0.15)) { state.selectedGroup = grp }
-                        }
-                        .contextMenu {
-                            Button {
-                                renamingGroup = GroupRenameItem(name: grp)
-                            } label: {
-                                Label("Rename Group…", systemImage: "pencil")
-                            }
-
-                            Button(role: .destructive) {
-                                deletingGroup = grp
-                            } label: {
-                                Label("Delete Group", systemImage: "trash")
-                            }
-                        }
-                    }
-
-                    Button {
-                        isCreatingGroup = true
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "folder.badge.plus")
-                                .font(.system(size: 10, weight: .medium))
-                            Text("Group")
-                                .font(.caption2)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        .cornerRadius(6)
-                        .foregroundStyle(Color.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .focusable(false)
-                    .help("Create new command group")
-                }
-                .padding(.vertical, 2)
             }
 
             // Search Bar & Keyboard shortcuts helper
@@ -342,33 +349,82 @@ struct QuickCommandsView: View {
             } else {
                 ScrollViewReader { scrollProxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 4) {
-                            ForEach(Array(filteredCommands.enumerated()), id: \.element.command.id) { index, item in
-                                QuickCommandCard(
-                                    command: item.command,
-                                    configured: item.configured,
-                                    surface: surface,
-                                    shortcutNumber: nil,
-                                    isHighlighted: state.selectedIndex == index,
-                                    onSelect: {
-                                        // Do not lock persistent focus on click
-                                    },
-                                    onExecute: {
-                                        handleExecute(item.command)
-                                    },
-                                    onInsert: {
-                                        handleInsert(item.command)
-                                    },
-                                    onSplitAndRun: {
-                                        handleSplitAndRun(item.command)
-                                    },
-                                    onDuplicate: { editing = item.command.duplicate() },
-                                    onEdit: { editing = item.command },
-                                    onDelete: { library.delete(item.command) }
-                                )
-                                .id(index)
+                        LazyVStack(alignment: .leading, spacing: 6) {
+                            if allGroups.isEmpty {
+                                ForEach(Array(filteredCommands.enumerated()), id: \.element.id) { index, item in
+                                    let isHighlighted = (state.selectedIndex == index)
+                                    let grpIcon = item.command.group.flatMap { library.icon(for: $0) }
+                                    QuickCommandCard(
+                                        command: item.command,
+                                        configured: item.configured,
+                                        surface: surface,
+                                        groupIcon: grpIcon,
+                                        showGroupBadge: true,
+                                        shortcutNumber: nil,
+                                        isHighlighted: isHighlighted,
+                                        onSelect: {},
+                                        onExecute: { handleExecute(item.command) },
+                                        onInsert: { handleInsert(item.command) },
+                                        onSplitAndRun: { handleSplitAndRun(item.command) },
+                                        onDuplicate: { editing = item.command.duplicate() },
+                                        onEdit: { editing = item.command },
+                                        onDelete: { library.delete(item.command) }
+                                    )
+                                    .id(index)
+                                }
+                            } else {
+                                ForEach(allGroups, id: \.self) { grp in
+                                    let groupCommands = filteredCommands.filter { $0.command.group == grp }
+                                    if !groupCommands.isEmpty || state.searchText.isEmpty {
+                                        GroupAccordionSection(
+                                            title: grp,
+                                            iconId: library.icon(for: grp),
+                                            commands: groupCommands,
+                                            isExpanded: isGroupExpanded(grp),
+                                            selectedIndex: state.selectedIndex,
+                                            visibleCommands: visibleCommands,
+                                            surface: surface,
+                                            isUngrouped: false,
+                                            onToggle: { toggleGroup(grp) },
+                                            onEditGroup: { renamingGroup = GroupRenameItem(name: grp) },
+                                            onDeleteGroup: { deletingGroup = grp },
+                                            onExecute: { handleExecute($0) },
+                                            onInsert: { handleInsert($0) },
+                                            onSplitAndRun: { handleSplitAndRun($0) },
+                                            onDuplicate: { editing = $0.duplicate() },
+                                            onEdit: { editing = $0 },
+                                            onDelete: { library.delete($0) }
+                                        )
+                                    }
+                                }
+
+                                let ungroupedCommands = filteredCommands.filter {
+                                    $0.command.group == nil || $0.command.group?.trimmingCharacters(in: .whitespaces).isEmpty == true
+                                }
+                                if !ungroupedCommands.isEmpty {
+                                    GroupAccordionSection(
+                                        title: "Ungrouped",
+                                        iconId: nil,
+                                        commands: ungroupedCommands,
+                                        isExpanded: isGroupExpanded("__ungrouped__"),
+                                        selectedIndex: state.selectedIndex,
+                                        visibleCommands: visibleCommands,
+                                        surface: surface,
+                                        isUngrouped: true,
+                                        onToggle: { toggleGroup("__ungrouped__") },
+                                        onEditGroup: nil,
+                                        onDeleteGroup: nil,
+                                        onExecute: { handleExecute($0) },
+                                        onInsert: { handleInsert($0) },
+                                        onSplitAndRun: { handleSplitAndRun($0) },
+                                        onDuplicate: { editing = $0.duplicate() },
+                                        onEdit: { editing = $0 },
+                                        onDelete: { library.delete($0) }
+                                    )
+                                }
                             }
                         }
+                        .padding(.vertical, 2)
                     }
                     .onChange(of: state.selectedIndex) { newIndex in
                         if let newIndex {
@@ -475,20 +531,20 @@ struct QuickCommandsView: View {
     }
 
     private func navigateSelection(_ delta: Int) {
-        let count = filteredCommands.count
+        let count = visibleCommands.count
         guard count > 0 else { return }
         let current = state.selectedIndex ?? (delta > 0 ? -1 : 0)
         state.selectedIndex = (current + delta + count) % count
     }
 
     private func executeFocusedCommand() {
-        guard let idx = state.selectedIndex, idx >= 0 && idx < filteredCommands.count else { return }
-        handleExecute(filteredCommands[idx].command)
+        guard let idx = state.selectedIndex, idx >= 0 && idx < visibleCommands.count else { return }
+        handleExecute(visibleCommands[idx].command)
     }
 
     private func insertFocusedCommand() {
-        guard let idx = state.selectedIndex, idx >= 0 && idx < filteredCommands.count else { return }
-        handleInsert(filteredCommands[idx].command)
+        guard let idx = state.selectedIndex, idx >= 0 && idx < visibleCommands.count else { return }
+        handleInsert(visibleCommands[idx].command)
     }
 
     private func triggerNumberShortcut(_ num: Int) {
@@ -586,20 +642,29 @@ private func cleanPresetTitle(_ rawTitle: String) -> String {
 
 private struct GroupTabButton: View {
     let title: String
+    var iconId: String? = nil
     let isSelected: Bool
     var count: Int?
     let action: () -> Void
 
-    private var iconName: String {
-        iconForPreset(name: title)
-    }
-
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: iconName)
-                    .font(.system(size: 10))
-                    .foregroundStyle(isSelected ? Color.white : Color.secondary)
+                let resolvedIcon = iconId ?? GroupIconCatalog.defaultIcon(for: title)
+                if let resolvedIcon = resolvedIcon, let img = GroupIconCatalog.image(for: resolvedIcon) {
+                    Image(nsImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 14, height: 14)
+                } else if title == "All" {
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(isSelected ? Color.white : Color.secondary)
+                } else {
+                    Image(systemName: iconForPreset(name: title))
+                        .font(.system(size: 10))
+                        .foregroundStyle(isSelected ? Color.white : Color.secondary)
+                }
 
                 Text(cleanPresetTitle(title))
                     .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
@@ -711,6 +776,8 @@ private struct QuickCommandCard: View, Equatable {
     let command: QuickCommand
     let configured: Bool
     let surface: Ghostty.SurfaceView?
+    var groupIcon: String? = nil
+    var showGroupBadge: Bool = true
     var shortcutNumber: Int?
     var isHighlighted: Bool = false
     var onSelect: (() -> Void)? = nil
@@ -727,6 +794,8 @@ private struct QuickCommandCard: View, Equatable {
     static func == (lhs: QuickCommandCard, rhs: QuickCommandCard) -> Bool {
         lhs.command == rhs.command &&
         lhs.configured == rhs.configured &&
+        lhs.groupIcon == rhs.groupIcon &&
+        lhs.showGroupBadge == rhs.showGroupBadge &&
         lhs.shortcutNumber == rhs.shortcutNumber &&
         lhs.isHighlighted == rhs.isHighlighted
     }
@@ -758,16 +827,25 @@ private struct QuickCommandCard: View, Equatable {
                             .foregroundStyle(isDisabled ? Color.secondary : Color.primary)
                             .lineLimit(1)
 
-                        if let grp = command.group, !grp.isEmpty {
-                            Text(cleanPresetTitle(grp))
-                                .font(.system(size: 9, weight: .medium))
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
-                                .background(Color.secondary.opacity(0.15))
-                                .cornerRadius(4)
-                                .foregroundStyle(Color.secondary)
+                        if showGroupBadge, let grp = command.group, !grp.isEmpty {
+                            HStack(spacing: 3) {
+                                let resolvedIcon = groupIcon ?? GroupIconCatalog.defaultIcon(for: grp)
+                                if let icon = resolvedIcon, let img = GroupIconCatalog.image(for: icon) {
+                                    Image(nsImage: img)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 11, height: 11)
+                                }
+                                Text(cleanPresetTitle(grp))
+                                    .font(.system(size: 9, weight: .medium))
+                                    .lineLimit(1)
+                            }
+                            .fixedSize(horizontal: true, vertical: false)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.secondary.opacity(0.15))
+                            .cornerRadius(4)
+                            .foregroundStyle(Color.secondary)
                         }
 
                         if !command.manualPlaceholders.isEmpty {
@@ -865,11 +943,156 @@ private struct QuickCommandCard: View, Equatable {
     }
 }
 
+private struct GroupAccordionSection: View {
+    let title: String
+    let iconId: String?
+    let commands: [QuickCommandDisplayItem]
+    let isExpanded: Bool
+    let selectedIndex: Int?
+    let visibleCommands: [QuickCommandDisplayItem]
+    let surface: Ghostty.SurfaceView?
+    var isUngrouped: Bool = false
+
+    let onToggle: () -> Void
+    let onEditGroup: (() -> Void)?
+    let onDeleteGroup: (() -> Void)?
+    let onExecute: (QuickCommand) -> Void
+    let onInsert: (QuickCommand) -> Void
+    let onSplitAndRun: (QuickCommand) -> Void
+    let onDuplicate: (QuickCommand) -> Void
+    let onEdit: (QuickCommand) -> Void
+    let onDelete: (QuickCommand) -> Void
+
+    @State private var isHeaderHovered: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Header Row
+            HStack(spacing: 6) {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 12)
+
+                let resolvedIcon = iconId ?? GroupIconCatalog.defaultIcon(for: title)
+                if let resolvedIcon = resolvedIcon, let img = GroupIconCatalog.image(for: resolvedIcon) {
+                    Image(nsImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Image(systemName: isUngrouped ? "tray" : "folder")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(cleanPresetTitle(title).uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.secondary)
+
+                Text("(\(commands.count))")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.secondary.opacity(0.7))
+
+                Spacer()
+
+                if let onEditGroup = onEditGroup, let onDeleteGroup = onDeleteGroup {
+                    Menu {
+                        Button {
+                            onEditGroup()
+                        } label: {
+                            Label("Edit Group…", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) {
+                            onDeleteGroup()
+                        } label: {
+                            Label("Delete Group", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary.opacity(isHeaderHovered ? 0.9 : 0.0))
+                            .frame(width: 18, height: 18)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .focusable(false)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHeaderHovered ? Color.primary.opacity(0.06) : Color.clear)
+            )
+            .contentShape(Rectangle())
+            .onHover { inside in
+                isHeaderHovered = inside
+            }
+            .onTapGesture {
+                onToggle()
+            }
+            .contextMenu {
+                if let onEditGroup = onEditGroup {
+                    Button {
+                        onEditGroup()
+                    } label: {
+                        Label("Edit Group…", systemImage: "pencil")
+                    }
+                }
+                if let onDeleteGroup = onDeleteGroup {
+                    Button(role: .destructive) {
+                        onDeleteGroup()
+                    } label: {
+                        Label("Delete Group", systemImage: "trash")
+                    }
+                }
+            }
+
+            // Commands list inside this accordion section
+            if isExpanded {
+                if commands.isEmpty {
+                    Text("No commands in this group")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary.opacity(0.6))
+                        .padding(.leading, 20)
+                        .padding(.vertical, 4)
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(commands) { item in
+                            let isHighlighted: Bool = (selectedIndex != nil && visibleCommands.indices.contains(selectedIndex!) && visibleCommands[selectedIndex!].id == item.id)
+                            QuickCommandCard(
+                                command: item.command,
+                                configured: item.configured,
+                                surface: surface,
+                                groupIcon: nil,
+                                showGroupBadge: false,
+                                shortcutNumber: nil,
+                                isHighlighted: isHighlighted,
+                                onSelect: {},
+                                onExecute: { onExecute(item.command) },
+                                onInsert: { onInsert(item.command) },
+                                onSplitAndRun: { onSplitAndRun(item.command) },
+                                onDuplicate: { onDuplicate(item.command) },
+                                onEdit: { onEdit(item.command) },
+                                onDelete: { onDelete(item.command) }
+                            )
+                        }
+                    }
+                    .padding(.leading, 12)
+                }
+            }
+        }
+    }
+}
+
 private struct QuickGroupCreationModal: View {
     @ObservedObject var library: QuickCommandLibrary
     let onCreated: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var groupName: String = ""
+    @State private var selectedIcon: String? = nil
+    @State private var hasManuallySelected: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -882,21 +1105,39 @@ private struct QuickGroupCreationModal: View {
 
             TextField("Group name", text: $groupName)
                 .textFieldStyle(.roundedBorder)
+                .onChange(of: groupName) { newValue in
+                    if !hasManuallySelected {
+                        selectedIcon = GroupIconCatalog.defaultIcon(for: newValue)
+                    }
+                }
+
+            HStack {
+                Text("Favicon")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                IconPickerPopUpButton(selectedIcon: $selectedIcon) { _ in
+                    hasManuallySelected = true
+                }
+                .frame(width: 180, height: 26)
+            }
 
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .focusable(false)
                 Button("Create Group") {
                     let trimmed = groupName.trimmingCharacters(in: .whitespaces)
                     if !trimmed.isEmpty {
-                        library.addGroup(trimmed)
+                        library.addGroup(trimmed, icon: selectedIcon)
                         onCreated(trimmed)
                         dismiss()
                     }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(groupName.trimmingCharacters(in: .whitespaces).isEmpty)
+                .focusable(false)
             }
         }
         .padding(18)
@@ -915,13 +1156,21 @@ private struct QuickGroupRenameModal: View {
     let onRenamed: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var newName: String = ""
+    @State private var selectedIcon: String? = nil
+    @State private var initialIcon: String? = nil
+
+    private var hasChanges: Bool {
+        let trimmed = newName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+        return trimmed != groupName || selectedIcon != initialIcon
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Rename Group")
+            Text("Edit Group")
                 .font(.headline)
 
-            Text("Enter a new name for '\(groupName)'. All commands in this group will be updated:")
+            Text("Update the name or icon for '\(groupName)':")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -929,25 +1178,39 @@ private struct QuickGroupRenameModal: View {
                 .textFieldStyle(.roundedBorder)
 
             HStack {
+                Text("Favicon")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                IconPickerPopUpButton(selectedIcon: $selectedIcon)
+                    .frame(width: 180, height: 26)
+            }
+
+            HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Rename") {
+                    .focusable(false)
+                Button("Save") {
                     let trimmed = newName.trimmingCharacters(in: .whitespaces)
-                    if !trimmed.isEmpty && trimmed != groupName {
-                        library.renameGroup(oldName: groupName, newName: trimmed)
+                    if !trimmed.isEmpty && hasChanges {
+                        library.renameGroup(oldName: groupName, newName: trimmed, newIcon: selectedIcon)
                         onRenamed(trimmed)
                         dismiss()
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || newName.trimmingCharacters(in: .whitespaces) == groupName)
+                .disabled(!hasChanges)
+                .focusable(false)
             }
         }
         .padding(18)
         .frame(width: 360)
         .onAppear {
             newName = groupName
+            let current = library.icon(for: groupName) ?? GroupIconCatalog.defaultIcon(for: groupName)
+            selectedIcon = current
+            initialIcon = library.icon(for: groupName)
         }
     }
 }
