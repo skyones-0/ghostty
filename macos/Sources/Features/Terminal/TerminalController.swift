@@ -268,18 +268,8 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             // behavior.
             c.toggleFullscreen(mode: .native)
         } else if let fullscreenMode = ghostty.config.windowFullscreen {
-            switch fullscreenMode {
-            case .native:
-                // Native has to be done immediately so that our stylemask contains
-                // fullscreen for the logic later in this method.
-                c.toggleFullscreen(mode: .native)
-
-            case .nonNative, .nonNativeVisibleMenu, .nonNativePaddedNotch:
-                // If we're non-native then we have to do it on a later loop
-                // so that the content view is setup.
-                DispatchQueue.main.async {
-                    c.toggleFullscreen(mode: fullscreenMode)
-                }
+            DispatchQueue.main.async {
+                c.toggleFullscreen(mode: fullscreenMode)
             }
         }
 
@@ -294,7 +284,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
             // Only cascade if we aren't fullscreen.
             if let window = c.window {
-                if !window.styleMask.contains(.fullScreen) {
+                if !window.styleMask.contains(.fullScreen) && ghostty.config.windowFullscreen == nil {
                     let hasFixedPos = c.derivedConfig.windowPositionX != nil && c.derivedConfig.windowPositionY != nil
                     // We're dispatching this async because otherwise the lastCascadePoint doesn't
                     // take effect after positioning in `showWindow`. Our best theory is there is
