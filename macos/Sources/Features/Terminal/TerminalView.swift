@@ -89,47 +89,57 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                     isShowing: $quickCommandsState.isShowing,
                     width: $quickCommandsState.width
                 ) {
-                    ZStack(alignment: .bottomTrailing) {
-                        TerminalSplitTreeView(
-                            tree: viewModel.surfaceTree,
-                            action: { delegate?.performSplitAction($0) })
-                            .environmentObject(ghostty)
-                            .ghosttyLastFocusedSurface(lastFocusedSurface)
-                            .focused($focused)
-                            .onAppear { self.focused = true }
-                            .onChange(of: focusedSurface) { newValue in
-                                // We want to keep track of our last focused surface so even if
-                                // we lose focus we keep this set to the last non-nil value.
-                                if newValue != nil {
-                                    lastFocusedSurface = .init(newValue)
-                                    self.delegate?.focusedSurfaceDidChange(to: newValue)
+                    VStack(spacing: 0) {
+                        ZStack(alignment: .bottomTrailing) {
+                            TerminalSplitTreeView(
+                                tree: viewModel.surfaceTree,
+                                action: { delegate?.performSplitAction($0) })
+                                .environmentObject(ghostty)
+                                .ghosttyLastFocusedSurface(lastFocusedSurface)
+                                .focused($focused)
+                                .onAppear { self.focused = true }
+                                .onChange(of: focusedSurface) { newValue in
+                                    // We want to keep track of our last focused surface so even if
+                                    // we lose focus we keep this set to the last non-nil value.
+                                    if newValue != nil {
+                                        lastFocusedSurface = .init(newValue)
+                                        self.delegate?.focusedSurfaceDidChange(to: newValue)
+                                    }
                                 }
-                            }
-                            .onChange(of: pwdURL) { newValue in
-                                self.delegate?.pwdDidChange(to: newValue)
-                            }
-                            .onChange(of: cellSize) { newValue in
-                                guard let size = newValue else { return }
-                                self.delegate?.cellSizeDidChange(to: size)
-                            }
-                            .frame(idealWidth: lastFocusedSurface?.value?.initialSize?.width,
-                                   idealHeight: lastFocusedSurface?.value?.initialSize?.height)
+                                .onChange(of: pwdURL) { newValue in
+                                    self.delegate?.pwdDidChange(to: newValue)
+                                }
+                                .onChange(of: cellSize) { newValue in
+                                    guard let size = newValue else { return }
+                                    self.delegate?.cellSizeDidChange(to: size)
+                                }
+                                .frame(idealWidth: lastFocusedSurface?.value?.initialSize?.width,
+                                       idealHeight: lastFocusedSurface?.value?.initialSize?.height)
 
-                        SidebarToggleOverlay(
-                            isShowing: quickCommandsState.isShowing,
-                            onToggle: {
-                                if let delegate = delegate {
-                                    delegate.toggleQuickCommands(nil)
-                                } else {
-                                    QuickCommandsState.shared.toggle()
+                            SidebarToggleOverlay(
+                                isShowing: quickCommandsState.isShowing,
+                                onToggle: {
+                                    if let delegate = delegate {
+                                        delegate.toggleQuickCommands(nil)
+                                    } else {
+                                        QuickCommandsState.shared.toggle()
+                                    }
                                 }
+                            )
+                            .padding(.trailing, 10)
+                            .padding(.bottom, 10)
+                        }
+
+                        BottomTaskDrawer(
+                            onAttachToTerminal: { cmd in
+                                guard let surface = activeSurface else { return }
+                                let qc = QuickCommand(title: "Task", command: cmd)
+                                delegate?.sendQuickCommand(qc, customText: cmd, execute: true, broadcast: false)
                             }
                         )
-                        .padding(.trailing, 10)
-                        .padding(.bottom, 10)
                     }
                 } sidebar: {
-                    QuickCommandsView(
+                    SidebarHubView(
                         configuredCommands: ghostty.config.quickCommands,
                         surface: activeSurface,
                         send: { command, customText, execute, broadcast in
@@ -141,6 +151,10 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(180)) {
                                 delegate?.sendQuickCommand(command, customText: customText, execute: execute, broadcast: false)
                             }
+                        },
+                        onPerformAction: { action in
+                            guard let surface = activeSurface else { return }
+                            delegate?.performAction(action, on: surface)
                         }
                     )
                 }

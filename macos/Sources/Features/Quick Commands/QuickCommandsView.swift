@@ -902,6 +902,9 @@ private struct QuickCommandCard: View, Equatable {
                     if onSplitAndRun != nil {
                         Button("Run in new split") { onSplitAndRun?() }
                     }
+                    Button("Run in Background (Task)") {
+                        BackgroundTaskManager.shared.run(command: command.command, title: command.title)
+                    }
                     Button("Duplicate") { onDuplicate() }
                     if !configured {
                         Button("Edit…") { onEdit() }
@@ -935,6 +938,21 @@ private struct QuickCommandCard: View, Equatable {
             .contentShape(Rectangle())
             .onHover { inside in
                 isHovered = inside
+            }
+            .contextMenu {
+                Button("Execute") { onExecute() }
+                Button("Insert in prompt") { onInsert() }
+                if onSplitAndRun != nil {
+                    Button("Run in new split") { onSplitAndRun?() }
+                }
+                Button("Run in Background (Task)") {
+                    BackgroundTaskManager.shared.run(command: command.command, title: command.title)
+                }
+                Button("Duplicate") { onDuplicate() }
+                if !configured {
+                    Button("Edit…") { onEdit() }
+                    Button("Delete", role: .destructive) { onDelete() }
+                }
             }
             .focusable(false)
             Divider()

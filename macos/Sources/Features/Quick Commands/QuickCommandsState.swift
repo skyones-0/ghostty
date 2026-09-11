@@ -1,6 +1,33 @@
 import SwiftUI
 import Combine
 
+public enum SidebarTab: String, CaseIterable, Identifiable {
+    case commands = "Commands"
+    case serial = "Serial"
+    case sessions = "Sessions"
+    case tasks = "Tasks"
+
+    public var id: String { rawValue }
+
+    public var iconName: String {
+        switch self {
+        case .commands: return "apple.terminal"
+        case .serial: return "cable.connector"
+        case .sessions: return "server.rack"
+        case .tasks: return "list.bullet.rectangle"
+        }
+    }
+
+    public var title: String {
+        switch self {
+        case .commands: return "Commands"
+        case .serial: return "Serial"
+        case .sessions: return "Sessions"
+        case .tasks: return "Tasks"
+        }
+    }
+}
+
 /// Shared state for Quick Commands sidebar across all windows and tabs.
 /// Ensures that sidebar visibility, width, filter, and active group
 /// are globally unified and target the currently active terminal session.
@@ -24,6 +51,8 @@ final class QuickCommandsState: ObservableObject {
         }
     }
 
+    @Published var activeTab: SidebarTab = .commands
+    @Published var selectedSerialDevicePath: String? = nil
     @Published var searchText: String = ""
     @Published var selectedGroup: String? = nil
     @Published var isBroadcast: Bool = false
@@ -32,10 +61,15 @@ final class QuickCommandsState: ObservableObject {
     private init() {
         self.isShowing = userDefaults.bool(forKey: isShowingKey)
         let savedWidth = CGFloat(userDefaults.double(forKey: widthKey))
-        self.width = savedWidth > 150 ? savedWidth : 300
+        self.width = savedWidth > 150 ? savedWidth : 320
     }
 
     func toggle() {
         isShowing.toggle()
+    }
+
+    func showTab(_ tab: SidebarTab) {
+        self.activeTab = tab
+        self.isShowing = true
     }
 }

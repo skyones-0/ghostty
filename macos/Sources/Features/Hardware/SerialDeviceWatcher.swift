@@ -4,25 +4,45 @@ import IOKit
 import IOKit.serial
 
 /// A representation of a connected serial communication device.
-struct SerialDevice: Identifiable, Equatable, Hashable {
-    var id: String { bsdPath }
-    let bsdPath: String
-    let name: String
-    let isUSB: Bool
-    let connectedAt: Date
+public struct SerialDevice: Identifiable, Equatable, Hashable {
+    public var id: String { bsdPath }
+    public let bsdPath: String
+    public let name: String
+    public let isUSB: Bool
+    public let connectedAt: Date
+
+    public init(bsdPath: String, name: String, isUSB: Bool, connectedAt: Date = Date()) {
+        self.bsdPath = bsdPath
+        self.name = name
+        self.isUSB = isUSB
+        self.connectedAt = connectedAt
+    }
 }
 
 /// Event-driven watcher for serial devices using IOKit notifications.
 /// Operates with 0% idle CPU by registering Mach notification ports with the main CFRunLoop.
 @MainActor
-final class SerialDeviceWatcher: ObservableObject {
-    static let shared = SerialDeviceWatcher()
+public final class SerialDeviceWatcher: ObservableObject {
+    public static let shared = SerialDeviceWatcher()
 
-    @Published private(set) var connectedDevices: [SerialDevice] = []
-    @Published var activeAlert: SerialDevice?
-    @Published var selectedBaudRate: Int = 115200
+    @Published public private(set) var connectedDevices: [SerialDevice] = []
+    @Published public var activeAlert: SerialDevice?
+    @Published public var selectedBaudRate: Int = 115200
 
-    static let standardBaudRates = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
+    public static let standardBaudRates = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
+
+    public static func allAvailablePorts() -> [SerialDevice] {
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: "/dev") else { return [] }
+        return files
+            .filter { $0.hasPrefix("cu.") }
+            .map { filename in
+                let fullPath = "/dev/" + filename
+                let name = filename.replacingOccurrences(of: "cu.", with: "")
+                let isUSB = filename.contains("usb") || filename.contains("uart") || filename.contains("wch") || filename.contains("slab")
+                return SerialDevice(bsdPath: fullPath, name: name, isUSB: isUSB, connectedAt: Date())
+            }
+            .sorted { $0.name < $1.name }
+    }
 
     private var notifyPort: IONotificationPortRef?
     private var matchedIterator: io_iterator_t = 0
@@ -186,7 +206,7 @@ final class SerialDeviceWatcher: ObservableObject {
 
         // Filter out built-in Apple internal virtual or debug serial ports
         let lower = bsdPath.lowercased()
-        if lower.contains("bluetooth") || lower.contains("debug-console") || lower.contains("wlan-debug") || lower.contains("wirelessap") {
+        if lower.contains("bluetooth") || lower.contains("debug-console") || lower.contains("wirelessap") {
             return nil
         }
 

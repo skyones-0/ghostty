@@ -12,22 +12,37 @@ struct SerialDeviceToast: View {
     var body: some View {
         HStack(spacing: 10) {
             // Icon
-            Image(systemName: "cable.connector")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.mint)
+            // Clickable Info leading to Sidebar Serial Inspector
+            Button {
+                QuickCommandsState.shared.selectedSerialDevicePath = device.bsdPath
+                QuickCommandsState.shared.showTab(.serial)
+                onDismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "cable.connector")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.mint)
 
-            // Info
-            VStack(alignment: .leading, spacing: 1) {
-                Text(device.name)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text(device.name)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                        }
 
-                Text(device.bsdPath)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
+                        Text(device.bsdPath)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
+            .buttonStyle(.plain)
+            .help("Click to configure serial connection in sidebar")
 
             // Baud rate menu
             Menu(content: {
