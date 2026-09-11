@@ -28,6 +28,9 @@ extension Ghostty {
         // Serial device watcher
         @ObservedObject private var serialWatcher = SerialDeviceWatcher.shared
 
+        // Background tasks manager
+        @ObservedObject private var taskManager = BackgroundTaskManager.shared
+
         // Ephemeral HUD toast for copied command output
         @State private var copiedHudMessage: String?
 
@@ -129,87 +132,10 @@ extension Ghostty {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
 
                 // Top-Right Overlays: Secure Input & Background Processes
-                VStack(spacing: 8) {
-                    if ghostty.config.secureInputIndication &&
-                        secureInput.enabled &&
-                        isFocusedSurface &&
-                        windowFocus {
-                        SecureInputOverlay()
-                    }
-
-                    if isFocusedSurface && windowFocus && !processMonitor.backgroundJobs.isEmpty {
-                        BackgroundProcessOverlay(
-                            jobs: processMonitor.backgroundJobs,
-                            onKill: { job in
-                                processMonitor.terminateJob(job)
-                            }
-                        )
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.top, 10)
-                .padding(.trailing, 10)
+                topRightOverlays
 
                 // Ephemeral Floating Alerts (Serial Device, Local Server Port, Copied HUD)
-                VStack(spacing: 8) {
-                    if let serial = serialWatcher.activeAlert, isFocusedSurface {
-                        SerialDeviceToast(
-                            device: serial,
-                            baudRate: $serialWatcher.selectedBaudRate,
-                            onConnect: { dev, baud in
-                                surfaceView.surfaceModel?.sendText("screen \(dev.bsdPath) \(baud)\n")
-                                serialWatcher.dismissAlert()
-                            },
-                            onDismiss: {
-                                serialWatcher.dismissAlert()
-                            }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .top).combined(with: .opacity)
-                        ))
-                    }
-
-                    if let portInfo = processMonitor.activePortAlert, isFocusedSurface {
-                        LocalPortToast(
-                            portInfo: portInfo,
-                            onDismiss: {
-                                processMonitor.dismissPortAlert()
-                            }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .top).combined(with: .opacity)
-                        ))
-                    }
-
-                    if let cmdAlert = processMonitor.activeCommandAlert, isFocusedSurface {
-                        CommandFinishedToast(
-                            alert: cmdAlert,
-                            onDismiss: {
-                                processMonitor.dismissCommandAlert()
-                            }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .top).combined(with: .opacity)
-                        ))
-                    }
-
-                    if let msg = copiedHudMessage, isFocusedSurface {
-                        CopiedHudToast(message: msg)
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .top).combined(with: .opacity),
-                                removal: .move(edge: .top).combined(with: .opacity)
-                            ))
-                    }
-                }
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: serialWatcher.activeAlert)
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: processMonitor.activePortAlert)
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: processMonitor.activeCommandAlert)
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: copiedHudMessage)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .padding(.top, 12)
+                ephemeralAlerts
 
                 // Search overlay
                 if let searchState = surfaceView.searchState {
@@ -283,6 +209,97 @@ extension Ghostty {
                     }
                 }
             }
+        }
+
+        @ViewBuilder
+        private var topRightOverlays: some View {
+            VStack(spacing: 8) {
+                if ghostty.config.secureInputIndication &&
+                    secureInput.enabled &&
+                    isFocusedSurface &&
+                    windowFocus {
+                    SecureInputOverlay()
+                }
+
+                if isFocusedSurface && windowFocus && (!processMonitor.backgroundJobs.isEmpty || taskManager.activeCount > 0) {
+                    BackgroundProcessOverlay(
+                        jobs: processMonitor.backgroundJobs,
+                        tasks: taskManager.activeTasks,
+                        onKillJob: { job in
+                            processMonitor.terminateJob(job)
+                        },
+                        onCancelTask: { task in
+                            taskManager.stop(id: task.id)
+                        }
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .padding(.top, 10)
+            .padding(.trailing, 10)
+        }
+
+        @ViewBuilder
+        private var ephemeralAlerts: some View {
+            VStack(spacing: 8) {
+                if let serial = serialWatcher.activeAlert, isFocusedSurface {
+                    SerialDeviceToast(
+                        device: serial,
+                        baudRate: $serialWatcher.selectedBaudRate,
+                        onConnect: { dev, baud in
+                            surfaceView.surfaceModel?.sendText("screen \(dev.bsdPath) \(baud)\n")
+                            serialWatcher.dismissAlert()
+                        },
+                        onDismiss: {
+                            serialWatcher.dismissAlert()
+                        }
+                    )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity)
+                    ))
+                }
+
+                if let portInfo = processMonitor.activePortAlert, isFocusedSurface {
+                    LocalPortToast(
+                        portInfo: portInfo,
+                        onDismiss: {
+                            processMonitor.dismissPortAlert()
+                        }
+                    )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity)
+                    ))
+                }
+
+                if let cmdAlert = processMonitor.activeCommandAlert, isFocusedSurface {
+                    CommandFinishedToast(
+                        alert: cmdAlert,
+                        onDismiss: {
+                            processMonitor.dismissCommandAlert()
+                        }
+                    )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity)
+                    ))
+                }
+
+                if let msg = copiedHudMessage, isFocusedSurface {
+                    CopiedHudToast(message: msg)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
+                }
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: serialWatcher.activeAlert)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: processMonitor.activePortAlert)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: processMonitor.activeCommandAlert)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: copiedHudMessage)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.top, 12)
         }
     }
 

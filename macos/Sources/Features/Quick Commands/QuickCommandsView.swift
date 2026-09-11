@@ -186,9 +186,6 @@ struct QuickCommandsView: View {
 
                 Spacer()
 
-                // Background Jobs Indicator
-                BackgroundJobsIndicator(monitor: processMonitor)
-
                 // Search toggle
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) {
