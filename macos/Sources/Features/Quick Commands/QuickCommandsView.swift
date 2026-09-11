@@ -1421,7 +1421,9 @@ struct QuickCommandsLayout<Terminal: View, Sidebar: View>: View {
                     sidebar().frame(width: bounded(width, total: geometry.size.width))
                 }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func bounded(_ value: CGFloat, total: CGFloat) -> CGFloat {

@@ -238,6 +238,7 @@ public struct BottomTaskDrawer: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }

@@ -89,46 +89,32 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                     isShowing: $quickCommandsState.isShowing,
                     width: $quickCommandsState.width
                 ) {
-                    VStack(spacing: 0) {
-                        ZStack(alignment: .bottomTrailing) {
-                            TerminalSplitTreeView(
-                                tree: viewModel.surfaceTree,
-                                action: { delegate?.performSplitAction($0) })
-                                .environmentObject(ghostty)
-                                .ghosttyLastFocusedSurface(lastFocusedSurface)
-                                .focused($focused)
-                                .onAppear { self.focused = true }
-                                .onChange(of: focusedSurface) { newValue in
-                                    // We want to keep track of our last focused surface so even if
-                                    // we lose focus we keep this set to the last non-nil value.
-                                    if newValue != nil {
-                                        lastFocusedSurface = .init(newValue)
-                                        self.delegate?.focusedSurfaceDidChange(to: newValue)
-                                    }
+                    ZStack(alignment: .bottomTrailing) {
+                        TerminalSplitTreeView(
+                            tree: viewModel.surfaceTree,
+                            action: { delegate?.performSplitAction($0) })
+                            .environmentObject(ghostty)
+                            .ghosttyLastFocusedSurface(lastFocusedSurface)
+                            .focused($focused)
+                            .onAppear { self.focused = true }
+                            .onChange(of: focusedSurface) { newValue in
+                                // We want to keep track of our last focused surface so even if
+                                // we lose focus we keep this set to the last non-nil value.
+                                if newValue != nil {
+                                    lastFocusedSurface = .init(newValue)
+                                    self.delegate?.focusedSurfaceDidChange(to: newValue)
                                 }
-                                .onChange(of: pwdURL) { newValue in
-                                    self.delegate?.pwdDidChange(to: newValue)
-                                }
-                                .onChange(of: cellSize) { newValue in
-                                    guard let size = newValue else { return }
-                                    self.delegate?.cellSizeDidChange(to: size)
-                                }
-                                .frame(idealWidth: lastFocusedSurface?.value?.initialSize?.width,
-                                       idealHeight: lastFocusedSurface?.value?.initialSize?.height)
-
-                            SidebarToggleOverlay(
-                                isShowing: quickCommandsState.isShowing,
-                                onToggle: {
-                                    if let delegate = delegate {
-                                        delegate.toggleQuickCommands(nil)
-                                    } else {
-                                        QuickCommandsState.shared.toggle()
-                                    }
-                                }
-                            )
-                            .padding(.trailing, 10)
-                            .padding(.bottom, 10)
-                        }
+                            }
+                            .onChange(of: pwdURL) { newValue in
+                                self.delegate?.pwdDidChange(to: newValue)
+                            }
+                            .onChange(of: cellSize) { newValue in
+                                guard let size = newValue else { return }
+                                self.delegate?.cellSizeDidChange(to: size)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .frame(idealWidth: lastFocusedSurface?.value?.initialSize?.width,
+                                   idealHeight: lastFocusedSurface?.value?.initialSize?.height)
 
                         BottomTaskDrawer(
                             onAttachToTerminal: { cmd in
@@ -137,7 +123,23 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                                 delegate?.sendQuickCommand(qc, customText: cmd, execute: true, broadcast: false)
                             }
                         )
+                        .frame(maxWidth: .infinity)
+                        .padding(.trailing, quickCommandsState.isShowing ? 0 : 44)
+
+                        SidebarToggleOverlay(
+                            isShowing: quickCommandsState.isShowing,
+                            onToggle: {
+                                if let delegate = delegate {
+                                    delegate.toggleQuickCommands(nil)
+                                } else {
+                                    QuickCommandsState.shared.toggle()
+                                }
+                            }
+                        )
+                        .padding(.trailing, 10)
+                        .padding(.bottom, 10)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } sidebar: {
                     SidebarHubView(
                         configuredCommands: ghostty.config.quickCommands,
@@ -157,11 +159,11 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                             delegate?.performAction(action, on: surface)
                         }
                     )
+                    .frame(maxHeight: .infinity)
                 }
-                .frame(idealWidth: lastFocusedSurface?.value?.initialSize?.width,
-                       idealHeight: lastFocusedSurface?.value?.initialSize?.height)
-                // Ignore safe area to extend up in to the titlebar region if we have the "hidden" titlebar style
-                .ignoresSafeArea(.container, edges: ghostty.config.macosTitlebarStyle == .hidden ? .top : [])
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Ignore safe area to extend up into the titlebar region
+                .ignoresSafeArea(.container, edges: .top)
 
                 if let surfaceView = lastFocusedSurface?.value {
                     TerminalCommandPaletteView(
