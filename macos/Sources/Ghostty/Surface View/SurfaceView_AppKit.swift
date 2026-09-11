@@ -2316,6 +2316,14 @@ extension Ghostty.SurfaceView {
 
         return false
     }
+
+    public func readVisibleText() -> String {
+        return cachedVisibleContents.get()
+    }
+
+    public func readScreenText() -> String {
+        return cachedScreenContents.get()
+    }
 }
 
 // MARK: Accessibility

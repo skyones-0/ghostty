@@ -31,6 +31,12 @@ extension Ghostty {
         // Background tasks manager
         @ObservedObject private var taskManager = BackgroundTaskManager.shared
 
+        // Session logger observer
+        @ObservedObject private var sessionLogger = SessionLogger.shared
+
+        // Expect / Send automation engine
+        @ObservedObject private var expectSend = ExpectSendEngine.shared
+
         // Ephemeral HUD toast for copied command output
         @State private var copiedHudMessage: String?
 
@@ -209,6 +215,13 @@ extension Ghostty {
                     }
                 }
             }
+            .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
+                guard isFocusedSurface && windowFocus else { return }
+                if KeywordHighlighter.shared.isEnabled {
+                    let text = surfaceView.readVisibleText()
+                    KeywordHighlighter.shared.scan(text: text)
+                }
+            }
         }
 
         @ViewBuilder
@@ -231,6 +244,28 @@ extension Ghostty {
                         onCancelTask: { task in
                             taskManager.stop(id: task.id)
                         }
+                    )
+                }
+
+                if isFocusedSurface && windowFocus && sessionLogger.isRecording {
+                    SessionRecordingIndicator()
+                }
+
+                if isFocusedSurface && windowFocus, let status = expectSend.currentStatus {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(width: 14, height: 14)
+                        Text(status)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.primary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(Color(nsColor: .windowBackgroundColor).opacity(0.92))
+                            .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
                     )
                 }
             }

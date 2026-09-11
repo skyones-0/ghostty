@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Darwin
 
 public struct SerialConnectionConfig: Equatable {
     public var name: String
@@ -13,6 +14,10 @@ public struct SerialConnectionConfig: Equatable {
     public var deleteSendsCtrlH: Bool
     public var vt100Keypad: Bool
 
+    // SecureCRT Hardware Tools: Line and Character delay
+    public var lineDelayMs: Int
+    public var charDelayMs: Int
+
     public static func `default`(for path: String, name: String? = nil) -> SerialConnectionConfig {
         let cleanName = name ?? (path as NSString).lastPathComponent.replacingOccurrences(of: "cu.", with: "")
         return SerialConnectionConfig(
@@ -25,7 +30,9 @@ public struct SerialConnectionConfig: Equatable {
             flowControl: "None",
             closeOnExit: false,
             deleteSendsCtrlH: false,
-            vt100Keypad: true
+            vt100Keypad: true,
+            lineDelayMs: 0,
+            charDelayMs: 0
         )
     }
 
@@ -45,6 +52,11 @@ public struct SerialInspectorView: View {
     @State private var availablePorts: [SerialDevice] = []
     @State private var selectedDevice: SerialDevice? = nil
     @State private var config: SerialConnectionConfig = .default(for: "/dev/cu.usbserial", name: "Serial Port")
+
+    // Hardware tools state
+    @State private var breakFeedbackMessage: String? = nil
+    @State private var isThrottledPasting = false
+    @State private var pasteProgressMessage: String? = nil
 
     init(
         surface: Ghostty.SurfaceView?,
@@ -79,6 +91,71 @@ public struct SerialInspectorView: View {
         selectedDevice = dev
         state.selectedSerialDevicePath = dev.bsdPath
         config = .default(for: dev.bsdPath, name: dev.name)
+    }
+
+    // MARK: - Hardware Break Signal
+
+    private func triggerBreakSignal() {
+        let devPath = config.devicePath
+
+        // 1. Send POSIX tcsendbreak to device if accessible
+        let fd = open(devPath, O_RDWR | O_NOCTTY | O_NONBLOCK)
+        if fd >= 0 {
+            tcsendbreak(fd, 0) // duration 0 sends break of 250ms-500ms
+            close(fd)
+        }
+
+        // 2. In GNU screen sessions, send screen break sequence Ctrl-A + b (\u{01}b)
+        surface?.surfaceModel?.sendText("\u{01}b")
+
+        breakFeedbackMessage = "⚡ Break sent (250ms UART Break condition)"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            if breakFeedbackMessage?.hasPrefix("⚡ Break") == true {
+                breakFeedbackMessage = nil
+            }
+        }
+    }
+
+    // MARK: - Throttled Paste (Line & Character Delay)
+
+    private func performThrottledPaste() {
+        guard let clipboardText = NSPasteboard.general.string(forType: .string), !clipboardText.isEmpty else {
+            pasteProgressMessage = "Clipboard is empty"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { pasteProgressMessage = nil }
+            return
+        }
+
+        guard let surface = surface else {
+            pasteProgressMessage = "No active terminal"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { pasteProgressMessage = nil }
+            return
+        }
+
+        let lines = clipboardText.components(separatedBy: .newlines)
+        let totalLines = lines.count
+        let lineDelay = max(config.lineDelayMs, 20)
+
+        isThrottledPasting = true
+        pasteProgressMessage = "Pasting 0/\(totalLines)..."
+
+        Task {
+            for (idx, line) in lines.enumerated() {
+                await MainActor.run {
+                    pasteProgressMessage = "Pasting \(idx + 1)/\(totalLines)..."
+                    surface.surfaceModel?.sendText(line + "\n")
+                }
+                try? await Task.sleep(nanoseconds: UInt64(lineDelay) * 1_000_000)
+            }
+
+            await MainActor.run {
+                isThrottledPasting = false
+                pasteProgressMessage = "✓ \(totalLines) lines pasted"
+            }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                pasteProgressMessage = nil
+            }
+        }
     }
 
     public var body: some View {
@@ -165,7 +242,7 @@ public struct SerialInspectorView: View {
 
                     Divider()
 
-                    // Configuration Form matching Screenshot
+                    // Configuration Form
                     VStack(alignment: .leading, spacing: 12) {
                         // Descriptive Name
                         VStack(alignment: .leading, spacing: 3) {
@@ -276,6 +353,98 @@ public struct SerialInspectorView: View {
                         .background(Color(nsColor: .controlBackgroundColor))
                         .cornerRadius(6)
 
+                        // Hardware Tools Section (SecureCRT Grade)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("HARDWARE TOOLS & PASTE THROTTLING")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.secondary)
+
+                            // Break Signal Button
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Send Break Signal")
+                                        .font(.system(size: 11, weight: .medium))
+                                    Text("Triggers Cisco ROMMON / U-Boot bootloader.")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button {
+                                    triggerBreakSignal()
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "bolt.fill")
+                                            .font(.system(size: 10))
+                                        Text("Send Break")
+                                            .font(.system(size: 10, weight: .bold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 5)
+                                            .fill(Color.orange.opacity(0.9))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .focusable(false)
+                            }
+
+                            if let msg = breakFeedbackMessage {
+                                Text(msg)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Color.orange)
+                                    .padding(.vertical, 2)
+                            }
+
+                            Divider()
+
+                            // Paste Throttling
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("Line Delay (Slow UARTs)")
+                                        .font(.system(size: 11))
+                                    Spacer()
+                                    Picker("", selection: $config.lineDelayMs) {
+                                        Text("None (0ms)").tag(0)
+                                        Text("20 ms").tag(20)
+                                        Text("50 ms").tag(50)
+                                        Text("100 ms").tag(100)
+                                        Text("250 ms").tag(250)
+                                    }
+                                    .labelsHidden()
+                                    .frame(width: 120)
+                                    .focusable(false)
+                                }
+
+                                HStack {
+                                    Button {
+                                        performThrottledPaste()
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "doc.on.clipboard")
+                                                .font(.system(size: 10))
+                                            Text(isThrottledPasting ? "Pasting..." : "Paste Throttled")
+                                                .font(.system(size: 10))
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    .disabled(isThrottledPasting)
+                                    .focusable(false)
+
+                                    if let progress = pasteProgressMessage {
+                                        Text(progress)
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(8)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                        .cornerRadius(6)
+
                         // Terminal Settings
                         VStack(alignment: .leading, spacing: 8) {
                             Text("TERMINAL OPTIONS")
@@ -314,7 +483,7 @@ public struct SerialInspectorView: View {
 
             Divider()
 
-            // Bottom Action Buttons matching Screenshot
+            // Bottom Action Buttons
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
                     Button("Restore Defaults") {
@@ -355,7 +524,7 @@ public struct SerialInspectorView: View {
 
                     Spacer()
 
-                    // Open in New Tab (Distinctive Orange/Accent Button from Screenshot)
+                    // Open in New Tab
                     Button {
                         let cmd = config.buildLaunchCommand()
                         onConnect(cmd, true)
