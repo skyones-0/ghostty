@@ -207,7 +207,8 @@ public struct SessionManagerView: View {
         VStack(spacing: 8) {
             // Header
             HStack {
-                SidebarSectionPicker()
+                Text("Session Manager")
+                    .font(.headline)
                 Spacer()
                 Button {
                     isCreatingSession = true

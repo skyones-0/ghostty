@@ -85,7 +85,8 @@ public struct SerialInspectorView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                SidebarSectionPicker()
+                Text("Serial Connection")
+                    .font(.headline)
                 Spacer()
                 Button {
                     refreshPorts()

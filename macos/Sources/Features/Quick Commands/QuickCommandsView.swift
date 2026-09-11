@@ -181,7 +181,8 @@ struct QuickCommandsView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Header
             HStack(spacing: 8) {
-                SidebarSectionPicker()
+                Text("Quick Commands")
+                    .font(.headline)
 
                 Spacer()
 
