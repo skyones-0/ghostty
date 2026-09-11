@@ -74,6 +74,8 @@ struct QuickCommandsView: View {
     @State private var editing: QuickCommand?
     @State private var parameterizing: QuickCommand?
     @State private var isCreatingGroup: Bool = false
+    @State private var renamingGroup: GroupRenameItem? = nil
+    @State private var deletingGroup: String? = nil
 
     @FocusState private var isSearchFocused: Bool
 
@@ -148,6 +150,7 @@ struct QuickCommandsView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .help(state.isBroadcast ? "Broadcast active (send to all splits)" : "Broadcast: Send to all splits")
                 .accessibilityLabel("Broadcast to all splits")
                 .accessibilityValue(state.isBroadcast ? "On" : "Off")
@@ -177,6 +180,7 @@ struct QuickCommandsView: View {
                 .help("Add Command or Group")
                 .accessibilityLabel("Add Command or Group")
                 .disabled(!library.canWrite)
+                .focusable(false)
             }
 
             // SecureCRT-style Horizontal Group Tabs
@@ -198,6 +202,19 @@ struct QuickCommandsView: View {
                         ) {
                             withAnimation(.easeInOut(duration: 0.15)) { state.selectedGroup = grp }
                         }
+                        .contextMenu {
+                            Button {
+                                renamingGroup = GroupRenameItem(name: grp)
+                            } label: {
+                                Label("Rename Group…", systemImage: "pencil")
+                            }
+
+                            Button(role: .destructive) {
+                                deletingGroup = grp
+                            } label: {
+                                Label("Delete Group", systemImage: "trash")
+                            }
+                        }
                     }
 
                     Button {
@@ -216,6 +233,7 @@ struct QuickCommandsView: View {
                         .foregroundStyle(Color.secondary)
                     }
                     .buttonStyle(.plain)
+                    .focusable(false)
                     .help("Create new command group")
                 }
                 .padding(.vertical, 2)
@@ -252,6 +270,7 @@ struct QuickCommandsView: View {
                             .font(.caption2)
                     }
                     .buttonStyle(.plain)
+                    .focusable(false)
                 }
             }
             .padding(.horizontal, 8)
@@ -296,10 +315,9 @@ struct QuickCommandsView: View {
                                     shortcutNumber: index < 9 ? index + 1 : nil,
                                     isHighlighted: state.selectedIndex == index,
                                     onSelect: {
-                                        state.selectedIndex = index
+                                        // Do not lock persistent focus on click
                                     },
                                     onExecute: {
-                                        state.selectedIndex = index
                                         handleExecute(item.command)
                                     },
                                     onInsert: {
@@ -317,8 +335,10 @@ struct QuickCommandsView: View {
                         }
                     }
                     .onChange(of: state.selectedIndex) { newIndex in
-                        withAnimation(.easeInOut(duration: 0.1)) {
-                            scrollProxy.scrollTo(newIndex, anchor: .center)
+                        if let newIndex {
+                            withAnimation(.easeInOut(duration: 0.1)) {
+                                scrollProxy.scrollTo(newIndex, anchor: .center)
+                            }
                         }
                     }
                 }
@@ -329,12 +349,14 @@ struct QuickCommandsView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             processMonitor.setSurfaceView(surface)
-            isSearchFocused = true
+            state.selectedIndex = nil
+            isSearchFocused = false
             keyMonitor.onMove = { delta in navigateSelection(delta) }
             keyMonitor.onExecute = { executeFocusedCommand() }
             keyMonitor.onInsert = { insertFocusedCommand() }
             keyMonitor.onCancel = {
                 isSearchFocused = false
+                state.selectedIndex = nil
                 if let surface {
                     surface.window?.makeFirstResponder(surface)
                 }
@@ -345,17 +367,18 @@ struct QuickCommandsView: View {
             keyMonitor.stop()
         }
         .onChange(of: state.searchText) { _ in
-            state.selectedIndex = 0
+            state.selectedIndex = nil
         }
         .onChange(of: state.selectedGroup) { _ in
-            state.selectedIndex = 0
+            state.selectedIndex = nil
         }
         .onChange(of: surface) { newSurface in
             processMonitor.setSurfaceView(newSurface)
         }
         .onChange(of: editing) { keyMonitor.isModalPresented = ($0 != nil || parameterizing != nil || isCreatingGroup) }
         .onChange(of: parameterizing) { keyMonitor.isModalPresented = (editing != nil || $0 != nil || isCreatingGroup) }
-        .onChange(of: isCreatingGroup) { keyMonitor.isModalPresented = (editing != nil || parameterizing != nil || $0) }
+        .onChange(of: isCreatingGroup) { keyMonitor.isModalPresented = (editing != nil || parameterizing != nil || $0 || renamingGroup != nil) }
+        .onChange(of: renamingGroup?.name) { keyMonitor.isModalPresented = (editing != nil || parameterizing != nil || isCreatingGroup || $0 != nil) }
         .sheet(item: $editing) { command in
             QuickCommandEditor(command: command, existingGroups: allGroups, library: library)
         }
@@ -363,6 +386,36 @@ struct QuickCommandsView: View {
             QuickGroupCreationModal(library: library) { newGroup in
                 state.selectedGroup = newGroup
             }
+        }
+        .sheet(item: $renamingGroup) { item in
+            QuickGroupRenameModal(groupName: item.name, library: library) { newName in
+                if state.selectedGroup == item.name {
+                    state.selectedGroup = newName
+                }
+            }
+        }
+        .confirmationDialog(
+            "Delete Group '\(deletingGroup ?? "")'?",
+            isPresented: Binding(
+                get: { deletingGroup != nil },
+                set: { if !$0 { deletingGroup = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Group", role: .destructive) {
+                if let grp = deletingGroup {
+                    if state.selectedGroup == grp {
+                        state.selectedGroup = nil
+                    }
+                    library.deleteGroup(grp)
+                }
+                deletingGroup = nil
+            }
+            Button("Cancel", role: .cancel) {
+                deletingGroup = nil
+            }
+        } message: {
+            Text("Commands belonging to this group will not be deleted; they will remain available under 'All'.")
         }
         .sheet(item: $parameterizing) { command in
             QuickCommandParameterModal(
@@ -382,17 +435,18 @@ struct QuickCommandsView: View {
     private func navigateSelection(_ delta: Int) {
         let count = filteredCommands.count
         guard count > 0 else { return }
-        state.selectedIndex = (state.selectedIndex + delta + count) % count
+        let current = state.selectedIndex ?? (delta > 0 ? -1 : 0)
+        state.selectedIndex = (current + delta + count) % count
     }
 
     private func executeFocusedCommand() {
-        guard state.selectedIndex >= 0 && state.selectedIndex < filteredCommands.count else { return }
-        handleExecute(filteredCommands[state.selectedIndex].command)
+        guard let idx = state.selectedIndex, idx >= 0 && idx < filteredCommands.count else { return }
+        handleExecute(filteredCommands[idx].command)
     }
 
     private func insertFocusedCommand() {
-        guard state.selectedIndex >= 0 && state.selectedIndex < filteredCommands.count else { return }
-        handleInsert(filteredCommands[state.selectedIndex].command)
+        guard let idx = state.selectedIndex, idx >= 0 && idx < filteredCommands.count else { return }
+        handleInsert(filteredCommands[idx].command)
     }
 
     private func triggerNumberShortcut(_ num: Int) {
@@ -528,6 +582,7 @@ private struct GroupTabButton: View {
             .cornerRadius(6)
         }
         .buttonStyle(.plain)
+        .focusable(false)
     }
 }
 
@@ -568,6 +623,7 @@ private struct BackgroundJobsIndicator: View {
                 .cornerRadius(10)
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .popover(isPresented: $showPopover, arrowEdge: .bottom) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -624,6 +680,7 @@ private struct QuickCommandCard: View, Equatable {
     let onDelete: () -> Void
 
     @State private var isHovered = false
+    @State private var isPressed = false
 
     static func == (lhs: QuickCommandCard, rhs: QuickCommandCard) -> Bool {
         lhs.command == rhs.command &&
@@ -639,15 +696,19 @@ private struct QuickCommandCard: View, Equatable {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 6) {
-                // Clickable Title Button (executes on click and selects)
+                // Clickable Title Button (executes on click)
                 Button {
+                    isPressed = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        isPressed = false
+                    }
                     onSelect?()
                     onExecute()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: iconForPreset(name: (command.group ?? "") + " " + command.title, commandText: command.command))
                             .font(.system(size: 11))
-                            .foregroundStyle(isHighlighted ? Color.primary : Color.secondary)
+                            .foregroundStyle(Color.secondary)
                             .frame(width: 14)
 
                         Text(command.title)
@@ -696,6 +757,7 @@ private struct QuickCommandCard: View, Equatable {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .disabled(isDisabled)
                 .help("Execute: \(command.command)")
 
@@ -710,6 +772,7 @@ private struct QuickCommandCard: View, Equatable {
                             .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.plain)
+                    .focusable(false)
                     .help("Split terminal right and run")
                     .opacity(isHovered ? 1.0 : 0.0)
                     .disabled(!isHovered)
@@ -734,6 +797,7 @@ private struct QuickCommandCard: View, Equatable {
                         .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
+                .focusable(false)
                 .fixedSize()
                 .accessibilityLabel("Options for \(command.title)")
             }
@@ -742,22 +806,18 @@ private struct QuickCommandCard: View, Equatable {
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(
-                        isHighlighted
+                        isPressed
                             ? Color.primary.opacity(0.12)
-                            : (isHovered ? Color.primary.opacity(0.06) : Color.clear)
+                            : (isHighlighted
+                                ? Color.primary.opacity(0.08)
+                                : (isHovered ? Color.primary.opacity(0.06) : Color.clear))
                     )
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isHighlighted ? Color.primary.opacity(0.16) : Color.clear, lineWidth: 1)
-            )
             .contentShape(Rectangle())
-            .onTapGesture {
-                onSelect?()
-            }
             .onHover { inside in
                 isHovered = inside
             }
+            .focusable(false)
             Divider()
                 .padding(.top, 2)
         }
@@ -800,6 +860,54 @@ private struct QuickGroupCreationModal: View {
         }
         .padding(18)
         .frame(width: 360)
+    }
+}
+
+private struct GroupRenameItem: Identifiable {
+    var id: String { name }
+    let name: String
+}
+
+private struct QuickGroupRenameModal: View {
+    let groupName: String
+    @ObservedObject var library: QuickCommandLibrary
+    let onRenamed: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var newName: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Rename Group")
+                .font(.headline)
+
+            Text("Enter a new name for '\(groupName)'. All commands in this group will be updated:")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextField("Group name", text: $newName)
+                .textFieldStyle(.roundedBorder)
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Rename") {
+                    let trimmed = newName.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty && trimmed != groupName {
+                        library.renameGroup(oldName: groupName, newName: trimmed)
+                        onRenamed(trimmed)
+                        dismiss()
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || newName.trimmingCharacters(in: .whitespaces) == groupName)
+            }
+        }
+        .padding(18)
+        .frame(width: 360)
+        .onAppear {
+            newName = groupName
+        }
     }
 }
 

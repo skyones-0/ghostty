@@ -148,6 +148,44 @@ final class QuickCommandLibrary: ObservableObject {
         persist(commands.filter { $0.id != command.id })
     }
 
+    @discardableResult
+    func renameGroup(oldName: String, newName: String) -> Bool {
+        let trimmedNew = newName.trimmingCharacters(in: .whitespaces)
+        guard !trimmedNew.isEmpty, trimmedNew != oldName else { return false }
+        var groups = customGroups.map { $0 == oldName ? trimmedNew : $0 }
+        if !groups.contains(trimmedNew) {
+            groups.append(trimmedNew)
+        }
+        groups.removeAll { $0 == oldName }
+        groups.sort()
+
+        let updatedCommands = commands.map { cmd -> QuickCommand in
+            if cmd.group == oldName {
+                var copy = cmd
+                copy.group = trimmedNew
+                return copy
+            }
+            return cmd
+        }
+        return persist(updatedCommands, groups: groups)
+    }
+
+    @discardableResult
+    func deleteGroup(_ group: String) -> Bool {
+        var groups = customGroups
+        groups.removeAll { $0 == group }
+
+        let updatedCommands = commands.map { cmd -> QuickCommand in
+            if cmd.group == group {
+                var copy = cmd
+                copy.group = nil
+                return copy
+            }
+            return cmd
+        }
+        return persist(updatedCommands, groups: groups)
+    }
+
     private func persist(_ updated: [QuickCommand], groups: [String]? = nil) -> Bool {
         guard canWrite else { return false }
         do {

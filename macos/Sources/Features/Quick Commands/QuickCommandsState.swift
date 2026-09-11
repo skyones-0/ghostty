@@ -27,7 +27,7 @@ final class QuickCommandsState: ObservableObject {
     @Published var searchText: String = ""
     @Published var selectedGroup: String? = nil
     @Published var isBroadcast: Bool = false
-    @Published var selectedIndex: Int = 0
+    @Published var selectedIndex: Int? = nil
 
     private init() {
         self.isShowing = userDefaults.bool(forKey: isShowingKey)
