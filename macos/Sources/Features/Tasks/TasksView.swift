@@ -29,17 +29,7 @@ public struct TasksView: View {
         VStack(spacing: 8) {
             // Header
             HStack {
-                Text("Background Tasks")
-                    .font(.headline)
-
-                if taskManager.activeCount > 0 {
-                    Text("\(taskManager.activeCount)")
-                        .font(.system(size: 10, weight: .bold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1.5)
-                        .background(Color.accentColor.opacity(0.2))
-                        .clipShape(Capsule())
-                }
+                SidebarSectionPicker()
 
                 Spacer()
 

@@ -27,57 +27,7 @@ public struct SidebarHubView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            // Top Tab Strip (Ghostty Minimalist Segmented Tabs)
-            HStack(spacing: 2) {
-                ForEach(SidebarTab.allCases) { tab in
-                    let isSelected = state.activeTab == tab
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.12)) {
-                            state.activeTab = tab
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: tab.iconName)
-                                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-
-                            Text(tab.title)
-                                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-
-                            // Badges
-                            if tab == .serial && !serialWatcher.connectedDevices.isEmpty {
-                                Circle()
-                                    .fill(Color.mint)
-                                    .frame(width: 5, height: 5)
-                            } else if tab == .tasks && taskManager.activeCount > 0 {
-                                Text("\(taskManager.activeCount)")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .padding(.horizontal, 3)
-                                    .padding(.vertical, 0.5)
-                                    .background(isSelected ? Color.white.opacity(0.3) : Color.accentColor.opacity(0.2))
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(isSelected ? Color(nsColor: .controlAccentColor) : Color.clear)
-                        )
-                        .foregroundStyle(isSelected ? Color.white : Color.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .focusable(false)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(Color(nsColor: .windowBackgroundColor).opacity(0.8))
-
-            Divider()
-
-            // Tab Content
+        Group {
             switch state.activeTab {
             case .commands:
                 QuickCommandsView(
@@ -138,5 +88,78 @@ public struct SidebarHubView: View {
             let qc = QuickCommand(title: "Connect", command: commandText)
             send(qc, commandText, true, false)
         }
+    }
+}
+
+/// Unified section picker dropdown styled to match Ghostty's minimalist aesthetic.
+public struct SidebarSectionPicker: View {
+    @ObservedObject private var state = QuickCommandsState.shared
+    @ObservedObject private var serialWatcher = SerialDeviceWatcher.shared
+    @ObservedObject private var taskManager = BackgroundTaskManager.shared
+    @State private var isHovered: Bool = false
+
+    public init() {}
+
+    public var body: some View {
+        Menu {
+            ForEach(SidebarTab.allCases) { tab in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        state.activeTab = tab
+                    }
+                } label: {
+                    HStack {
+                        Label(tab.longTitle, systemImage: tab.iconName)
+                        if tab == .serial && !serialWatcher.connectedDevices.isEmpty {
+                            Text("(\(serialWatcher.connectedDevices.count))")
+                        } else if tab == .tasks && taskManager.activeCount > 0 {
+                            Text("(\(taskManager.activeCount))")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: state.activeTab.iconName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+
+                Text(state.activeTab.longTitle)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(1)
+
+                // Indicator badges next to title
+                if state.activeTab == .serial && !serialWatcher.connectedDevices.isEmpty {
+                    Circle()
+                        .fill(Color.mint)
+                        .frame(width: 6, height: 6)
+                } else if state.activeTab == .tasks && taskManager.activeCount > 0 {
+                    Text("\(taskManager.activeCount)")
+                        .font(.system(size: 8, weight: .bold))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.accentColor.opacity(0.25))
+                        .clipShape(Capsule())
+                }
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Color.secondary.opacity(0.7))
+            }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(isHovered ? Color.primary.opacity(0.06) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { isHovered = $0 }
+        .help("Switch Section")
+        .focusable(false)
     }
 }

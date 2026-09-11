@@ -26,6 +26,15 @@ public enum SidebarTab: String, CaseIterable, Identifiable {
         case .tasks: return "Tasks"
         }
     }
+
+    public var longTitle: String {
+        switch self {
+        case .commands: return "Quick Commands"
+        case .serial: return "Serial Connection"
+        case .sessions: return "Session Manager"
+        case .tasks: return "Background Tasks"
+        }
+    }
 }
 
 /// Shared state for Quick Commands sidebar across all windows and tabs.
