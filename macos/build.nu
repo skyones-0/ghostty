@@ -4,10 +4,10 @@
 # to avoid Nix shell interference (NIX_LDFLAGS, NIX_CFLAGS_COMPILE, etc.).
 
 def main [
-    --scheme: string = "Ghostty"       # Xcode scheme (Ghostty, DockTilePlugin)
-    --configuration: string = "Debug"  # Build configuration (Debug, Release, ReleaseLocal)
-    --action: string = "build"         # xcodebuild action (build, test, clean, etc.)
-    --arch: string = ""                # Architecture override (arm64, x86_64)
+    --scheme: string = "Ghostty"              # Xcode scheme (Ghostty, DockTilePlugin)
+    --configuration: string = "ReleaseLocal" # Build configuration (Debug, ReleaseLocal, Release)
+    --action: string = "build"                # xcodebuild action (build, test, clean, etc.)
+    --arch: string = "arm64"                 # Architecture override (exclusive to macOS ARM Apple Silicon)
 ] {
     let project = ($env.FILE_PWD | path join "Ghostty.xcodeproj")
     let build_dir = ($env.FILE_PWD | path join "build")
@@ -46,9 +46,13 @@ def main [
         let sparkle_framework = ($app_dir | path join "Contents" "Frameworks" "Sparkle.framework")
         if ($sparkle_framework | path exists) {
             try { ^codesign --force --sign - $sparkle_framework }
-            let entitlements = ($env.FILE_PWD | path join $"Ghostty($configuration).entitlements")
-            if ($entitlements | path exists) {
-                try { ^codesign --force --sign - --entitlements $entitlements $app_dir }
+            let target_entitlements = if ($entitlements | path exists) {
+                $entitlements
+            } else {
+                ($env.FILE_PWD | path join "GhosttyReleaseLocal.entitlements")
+            }
+            if ($target_entitlements | path exists) {
+                try { ^codesign --force --sign - --entitlements $target_entitlements $app_dir }
             } else {
                 try { ^codesign --force --sign - $app_dir }
             }
