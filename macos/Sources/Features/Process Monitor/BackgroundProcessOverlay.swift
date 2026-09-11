@@ -8,6 +8,7 @@ struct BackgroundProcessOverlay: View {
 
     // Animations
     @State private var gradientAngle: Angle = .degrees(0)
+    @State private var gradientOpacity: CGFloat = 0.65
     @State private var isHovered = false
 
     // Popover explainer text
@@ -17,41 +18,31 @@ struct BackgroundProcessOverlay: View {
         jobs.count + tasks.count
     }
 
-    private var isActive: Bool {
-        isHovered || isPopover
-    }
-
     var body: some View {
         Image(systemName: "platter.2.filled.iphone.landscape")
             .resizable()
             .scaledToFit()
             .frame(width: 19, height: 19)
-            .foregroundColor(isActive ? .black : Color.primary.opacity(0.7))
+            .foregroundColor(.black)
             .frame(width: 35, height: 35)
             .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(.ultraThinMaterial)
-                        .opacity(isActive ? 0.3 : 0.8)
-
-                    Rectangle()
-                        .fill(
-                            AngularGradient(
-                                gradient: Gradient(
-                                    colors: [.purple, .blue, .cyan, .blue, .purple]
-                                ),
-                                center: .center,
-                                angle: gradientAngle
-                            )
+                Rectangle()
+                    .fill(
+                        AngularGradient(
+                            gradient: Gradient(
+                                colors: [.purple, .blue, .cyan, .blue, .purple]
+                            ),
+                            center: .center,
+                            angle: gradientAngle
                         )
-                        .blur(radius: 4, opaque: true)
-                        .opacity(isActive ? 0.85 : 0)
-                }
+                    )
+                    .blur(radius: 4, opaque: true)
+                    .opacity(gradientOpacity)
             )
             .mask(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isActive ? Color.white.opacity(0.3) : Color.primary.opacity(0.12), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
             )
             .overlay(alignment: .topTrailing) {
                 if totalCount > 1 {
@@ -68,16 +59,8 @@ struct BackgroundProcessOverlay: View {
             .contentShape(RoundedRectangle(cornerRadius: 12))
             .scaleEffect(isHovered ? 1.06 : 1.0)
             .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isHovered)
-            .animation(.easeInOut(duration: 0.2), value: isActive)
             .onHover { hovering in
                 isHovered = hovering
-                if hovering {
-                    withAnimation(Animation.linear(duration: 2.5).repeatForever(autoreverses: false)) {
-                        gradientAngle = .degrees(360)
-                    }
-                } else if !isPopover {
-                    gradientAngle = .degrees(0)
-                }
             }
             .onTapGesture {
                 isPopover = true
@@ -217,19 +200,11 @@ struct BackgroundProcessOverlay: View {
                 .frame(minWidth: 280, maxWidth: 360)
             }
             .onAppear {
-                if isActive {
-                    withAnimation(Animation.linear(duration: 2.5).repeatForever(autoreverses: false)) {
-                        gradientAngle = .degrees(360)
-                    }
+                withAnimation(Animation.linear(duration: 2.5).repeatForever(autoreverses: false)) {
+                    gradientAngle = .degrees(360)
                 }
-            }
-            .onChange(of: isPopover) { popoverShowing in
-                if popoverShowing || isHovered {
-                    withAnimation(Animation.linear(duration: 2.5).repeatForever(autoreverses: false)) {
-                        gradientAngle = .degrees(360)
-                    }
-                } else {
-                    gradientAngle = .degrees(0)
+                withAnimation(Animation.linear(duration: 2.0).repeatForever(autoreverses: true)) {
+                    gradientOpacity = 0.95
                 }
             }
     }
