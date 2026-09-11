@@ -44,17 +44,26 @@ def main [
     if ($action == "build") {
         let app_dir = ($build_dir | path join $configuration "Ghostty.app")
         let sparkle_framework = ($app_dir | path join "Contents" "Frameworks" "Sparkle.framework")
+        let sign_id = try {
+            ^security find-identity -v -p codesigning
+            | lines
+            | find "Apple Development:"
+            | first
+            | parse --regex "\"([^\"]+)\""
+            | get capture0.0
+        } catch { "-" }
+
         if ($sparkle_framework | path exists) {
-            try { ^codesign --force --sign - $sparkle_framework }
+            try { ^codesign --force --sign $sign_id $sparkle_framework }
             let target_entitlements = if ($entitlements | path exists) {
                 $entitlements
             } else {
                 ($env.FILE_PWD | path join "GhosttyReleaseLocal.entitlements")
             }
             if ($target_entitlements | path exists) {
-                try { ^codesign --force --sign - --entitlements $target_entitlements $app_dir }
+                try { ^codesign --force --sign $sign_id --entitlements $target_entitlements $app_dir }
             } else {
-                try { ^codesign --force --sign - $app_dir }
+                try { ^codesign --force --sign $sign_id $app_dir }
             }
             try {
                 ^/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f $app_dir
