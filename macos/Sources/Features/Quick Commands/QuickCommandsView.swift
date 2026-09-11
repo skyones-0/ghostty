@@ -76,6 +76,7 @@ struct QuickCommandsView: View {
     @State private var isCreatingGroup: Bool = false
     @State private var renamingGroup: GroupRenameItem? = nil
     @State private var deletingGroup: String? = nil
+    @State private var isSearchVisible: Bool = false
 
     @FocusState private var isSearchFocused: Bool
 
@@ -138,6 +139,34 @@ struct QuickCommandsView: View {
 
                 // Background Jobs Indicator
                 BackgroundJobsIndicator(monitor: processMonitor)
+
+                // Search toggle
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isSearchVisible.toggle()
+                    }
+                    if isSearchVisible {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            isSearchFocused = true
+                        }
+                    } else {
+                        isSearchFocused = false
+                        state.searchText = ""
+                        if let surface {
+                            surface.window?.makeFirstResponder(surface)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(isSearchVisible ? Color.primary : Color.secondary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help(isSearchVisible ? "Hide Search" : "Search Commands")
+                .accessibilityLabel("Search Commands")
 
                 // Broadcast toggle (SecureCRT Send to All)
                 Button {
@@ -240,43 +269,50 @@ struct QuickCommandsView: View {
             }
 
             // Search Bar & Keyboard shortcuts helper
-            HStack(spacing: 4) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-                TextField("Search...", text: $state.searchText)
-                    .textFieldStyle(.plain)
-                    .font(.caption)
-                    .focused($isSearchFocused)
-                    .onSubmit {
-                        if NSEvent.modifierFlags.contains(.option) {
-                            insertFocusedCommand()
-                        } else {
-                            executeFocusedCommand()
+            if isSearchVisible {
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                    TextField("Search...", text: $state.searchText)
+                        .textFieldStyle(.plain)
+                        .font(.caption)
+                        .focused($isSearchFocused)
+                        .onSubmit {
+                            if NSEvent.modifierFlags.contains(.option) {
+                                insertFocusedCommand()
+                            } else {
+                                executeFocusedCommand()
+                            }
                         }
-                    }
-                    .onExitCommand {
-                        isSearchFocused = false
-                        if let surface {
-                            surface.window?.makeFirstResponder(surface)
+                        .onExitCommand {
+                            isSearchFocused = false
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                isSearchVisible = false
+                                state.searchText = ""
+                            }
+                            if let surface {
+                                surface.window?.makeFirstResponder(surface)
+                            }
                         }
+                    if !state.searchText.isEmpty {
+                        Button {
+                            state.searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                                .font(.caption2)
+                        }
+                        .buttonStyle(.plain)
+                        .focusable(false)
                     }
-                if !state.searchText.isEmpty {
-                    Button {
-                        state.searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                            .font(.caption2)
-                    }
-                    .buttonStyle(.plain)
-                    .focusable(false)
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(6)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(6)
 
             if state.isBroadcast {
                 HStack(spacing: 4) {
@@ -356,6 +392,12 @@ struct QuickCommandsView: View {
             keyMonitor.onInsert = { insertFocusedCommand() }
             keyMonitor.onCancel = {
                 isSearchFocused = false
+                if isSearchVisible {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isSearchVisible = false
+                        state.searchText = ""
+                    }
+                }
                 state.selectedIndex = nil
                 if let surface {
                     surface.window?.makeFirstResponder(surface)
