@@ -49,12 +49,13 @@ def main [
             | lines
             | find "Apple Development:"
             | first
-            | parse --regex "\"([^\"]+)\""
+            | parse --regex "([A-F0-9]{40})"
             | get capture0.0
         } catch { "-" }
 
         if ($sparkle_framework | path exists) {
             try { ^codesign --force --sign $sign_id $sparkle_framework }
+            let entitlements = ($env.FILE_PWD | path join $"Ghostty($configuration).entitlements")
             let target_entitlements = if ($entitlements | path exists) {
                 $entitlements
             } else {

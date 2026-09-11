@@ -141,8 +141,8 @@ struct QuickCommandsView: View {
                 Button {
                     state.isBroadcast.toggle()
                 } label: {
-                    Image(systemName: state.isBroadcast ? "rectangle.split.2x2.fill" : "rectangle.split.2x2")
-                        .foregroundStyle(state.isBroadcast ? Color.accentColor : Color.secondary)
+                    Image(systemName: state.isBroadcast ? "wave.3.backward.circle.fill" : "wave.3.backward")
+                        .foregroundStyle(state.isBroadcast ? Color.orange : Color.secondary)
                 }
                 .buttonStyle(.plain)
                 .help(state.isBroadcast ? "Broadcast active (send to all splits)" : "Broadcast: Send to all splits")
@@ -242,7 +242,7 @@ struct QuickCommandsView: View {
 
             if state.isBroadcast {
                 HStack(spacing: 4) {
-                    Image(systemName: "antenna.radiowaves.left.and.right")
+                    Image(systemName: "wave.3.backward")
                         .foregroundStyle(.orange)
                     Text("Broadcast active: commands will be sent to all splits.")
                         .font(.caption2)
@@ -276,7 +276,11 @@ struct QuickCommandsView: View {
                                     surface: surface,
                                     shortcutNumber: index < 9 ? index + 1 : nil,
                                     isHighlighted: state.selectedIndex == index,
+                                    onSelect: {
+                                        state.selectedIndex = index
+                                    },
                                     onExecute: {
+                                        state.selectedIndex = index
                                         handleExecute(item.command)
                                     },
                                     onInsert: {
@@ -420,17 +424,71 @@ struct QuickCommandsView: View {
     }
 }
 
+private func iconForPreset(name: String, commandText: String = "") -> String {
+    let lower = (name + " " + commandText).lowercased()
+    if lower == "all" { return "tray.2.fill" }
+    if lower.contains("ssh") || lower.contains("server") || lower.contains("vps") || lower.contains("host") {
+        return "server.rack"
+    }
+    if lower.contains("git") || lower.contains("github") || lower.contains("commit") || lower.contains("branch") {
+        return "arrow.triangle.branch"
+    }
+    if lower.contains("linux") || lower.contains("ubuntu") || lower.contains("debian") || lower.contains("arch") {
+        return "terminal.fill"
+    }
+    if lower.contains("docker") || lower.contains("container") || lower.contains("k8s") || lower.contains("compose") {
+        return "shippingbox.fill"
+    }
+    if lower.contains("ai") || lower.contains("agent") || lower.contains("claude") || lower.contains("codex") || lower.contains("llm") || lower.contains("agy") {
+        return "sparkles"
+    }
+    if lower.contains("db") || lower.contains("database") || lower.contains("sql") || lower.contains("mongo") || lower.contains("redis") {
+        return "cylinder.split.1x2.fill"
+    }
+    if lower.contains("kill") || lower.contains("stop") {
+        return "stop.circle"
+    }
+    if lower.contains("log") || lower.contains("tail") || lower.contains("journal") {
+        return "doc.text.magnifyingglass"
+    }
+    if lower.contains("cloud") || lower.contains("aws") || lower.contains("gcp") || lower.contains("azure") {
+        return "cloud.fill"
+    }
+    if lower.contains("curl") || lower.contains("http") || lower.contains("api") || lower.contains("web") {
+        return "network"
+    }
+    return "folder.fill"
+}
+
+private func cleanPresetTitle(_ rawTitle: String) -> String {
+    var text = rawTitle.trimmingCharacters(in: .whitespaces)
+    while let first = text.unicodeScalars.first, first.properties.isEmoji && !first.properties.isASCIIHexDigit {
+        text.removeFirst()
+        text = text.trimmingCharacters(in: .whitespaces)
+    }
+    return text.isEmpty ? rawTitle : text
+}
+
 private struct GroupTabButton: View {
     let title: String
     let isSelected: Bool
     var count: Int?
     let action: () -> Void
 
+    private var iconName: String {
+        iconForPreset(name: title)
+    }
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                Text(title)
+            HStack(spacing: 5) {
+                Image(systemName: iconName)
+                    .font(.system(size: 10))
+                    .foregroundStyle(isSelected ? Color.white : Color.secondary)
+
+                Text(cleanPresetTitle(title))
                     .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+
                 if let count, count > 0 {
                     Text("\(count)")
                         .font(.system(size: 9, weight: .bold))
@@ -538,6 +596,7 @@ private struct QuickCommandCard: View, Equatable {
     let surface: Ghostty.SurfaceView?
     var shortcutNumber: Int?
     var isHighlighted: Bool = false
+    var onSelect: (() -> Void)? = nil
     let onExecute: () -> Void
     let onInsert: () -> Void
     var onSplitAndRun: (() -> Void)?
@@ -561,18 +620,24 @@ private struct QuickCommandCard: View, Equatable {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 6) {
-                // Clickable Title Button (executes on click)
+                // Clickable Title Button (executes on click and selects)
                 Button {
+                    onSelect?()
                     onExecute()
                 } label: {
                     HStack(spacing: 6) {
+                        Image(systemName: iconForPreset(name: (command.group ?? "") + " " + command.title, commandText: command.command))
+                            .font(.system(size: 11))
+                            .foregroundStyle(isHighlighted ? Color.primary : Color.secondary)
+                            .frame(width: 14)
+
                         Text(command.title)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(isDisabled ? Color.secondary : Color.primary)
                             .lineLimit(1)
 
                         if let grp = command.group, !grp.isEmpty {
-                            Text(grp)
+                            Text(cleanPresetTitle(grp))
                                 .font(.system(size: 9, weight: .medium))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
@@ -615,10 +680,10 @@ private struct QuickCommandCard: View, Equatable {
                 .disabled(isDisabled)
                 .help("Execute: \(command.command)")
 
-                // Hover Split & Run Action
-                if isHovered && onSplitAndRun != nil {
+                // Split & Run Action (always present in layout to avoid content resizing, opacity toggled)
+                if let onSplitAndRun = onSplitAndRun {
                     Button {
-                        onSplitAndRun?()
+                        onSplitAndRun()
                     } label: {
                         Image(systemName: "rectangle.split.2x1")
                             .font(.system(size: 10))
@@ -627,6 +692,8 @@ private struct QuickCommandCard: View, Equatable {
                     }
                     .buttonStyle(.plain)
                     .help("Split terminal right and run")
+                    .opacity(isHovered ? 1.0 : 0.0)
+                    .disabled(!isHovered)
                 }
 
                 // Context Menu (...)
@@ -657,14 +724,18 @@ private struct QuickCommandCard: View, Equatable {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(
                         isHighlighted
-                            ? Color.accentColor.opacity(0.18)
-                            : (isHovered ? Color(nsColor: .controlBackgroundColor) : Color.clear)
+                            ? Color.primary.opacity(0.12)
+                            : (isHovered ? Color.primary.opacity(0.06) : Color.clear)
                     )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(isHighlighted ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1)
+                    .stroke(isHighlighted ? Color.primary.opacity(0.16) : Color.clear, lineWidth: 1)
             )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onSelect?()
+            }
             .onHover { inside in
                 isHovered = inside
             }
