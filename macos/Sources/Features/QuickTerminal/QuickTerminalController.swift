@@ -442,6 +442,7 @@ class QuickTerminalController: BaseTerminalController {
 
         // Move it to the visible position since animation requires this
         DispatchQueue.main.async {
+            window.orderFrontRegardless()
             window.makeKeyAndOrderFront(nil)
         }
 

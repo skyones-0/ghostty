@@ -28,6 +28,13 @@ class QuickTerminalWindow: NSPanel {
 
         // We don't want to activate the owning app when quick terminal is triggered.
         self.styleMask.insert(.nonactivatingPanel)
+
+        // Ensure the panel can appear on all spaces and over native fullscreen apps
+        self.collectionBehavior = [
+            .canJoinAllSpaces,
+            .fullScreenAuxiliary,
+            .ignoresCycle
+        ]
     }
 
     /// This is set to the frame prior to setting `contentView`. This is purely a hack to workaround
